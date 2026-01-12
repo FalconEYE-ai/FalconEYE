@@ -113,6 +113,61 @@ def _format_finding_realtime(finding: SecurityFinding, console: Console, finding
     console.print("")  # Spacing between findings
 
 
+def _configure_logger_verbosity(container, verbose: bool) -> None:
+    """
+    Configure logger console output based on verbose flag.
+
+    In non-verbose mode, removes console handlers so logs only go to file.
+
+    Args:
+        container: DI container with config
+        verbose: Whether verbose mode is enabled
+    """
+    import sys
+
+    logger = FalconEyeLogger.get_instance(
+        level=container.config.logging.level,
+        log_file=Path(container.config.logging.file),
+        console=True,  # Initialize with console enabled
+        rotation=container.config.logging.rotation,
+        retention_days=container.config.logging.retention_days,
+    )
+
+    # Disable console handlers if not verbose
+    if not verbose:
+        logger.logger.handlers = [
+            h for h in logger.logger.handlers
+            if not (isinstance(h, logging.StreamHandler) and h.stream == sys.stderr)
+        ]
+
+
+def _estimate_time_based_progress(elapsed_seconds: float) -> int:
+    """
+    Estimate progress percentage based on elapsed time.
+
+    Uses a logarithmic-like curve: fast initial progress, slowing over time.
+    This provides smooth progress feedback when actual progress can't be measured.
+
+    Args:
+        elapsed_seconds: Time elapsed since operation started
+
+    Returns:
+        Estimated progress percentage (0-95, never 100)
+    """
+    if elapsed_seconds < 10:
+        # First 10 seconds: 0-20%
+        return int((elapsed_seconds / 10) * 20)
+    elif elapsed_seconds < 30:
+        # 10-30 seconds: 20-60%
+        return 20 + int(((elapsed_seconds - 10) / 20) * 40)
+    elif elapsed_seconds < 60:
+        # 30-60 seconds: 60-85%
+        return 60 + int(((elapsed_seconds - 30) / 30) * 25)
+    else:
+        # After 60 seconds: 85-95% (slow increase)
+        return 85 + min(10, int((elapsed_seconds - 60) / 10))
+
+
 def index_command(
     path: Path,
     language: Optional[str],
@@ -148,25 +203,9 @@ def index_command(
 
     # Create DI container
     container = DIContainer.create(config_path)
-    
-    # Control console logging based on verbose flag
-    # Get the logger instance and control console output
-    logger = FalconEyeLogger.get_instance(
-        level=container.config.logging.level,
-        log_file=Path(container.config.logging.file),
-        console=True,  # Initialize with console enabled
-        rotation=container.config.logging.rotation,
-        retention_days=container.config.logging.retention_days,
-    )
-    
-    # Disable console handlers if not verbose
-    if not verbose:
-        # Remove console handlers (StreamHandler writing to stderr)
-        import sys
-        logger.logger.handlers = [
-            h for h in logger.logger.handlers 
-            if not (isinstance(h, logging.StreamHandler) and h.stream == sys.stderr)
-        ]
+
+    # Configure logger verbosity
+    _configure_logger_verbosity(container, verbose)
 
     # Use config values if not specified
     if chunk_size is None:
@@ -361,23 +400,9 @@ def review_command(
 
     # Create DI container
     container = DIContainer.create(config_path)
-    
-    # Control console logging based on verbose flag
-    logger = FalconEyeLogger.get_instance(
-        level=container.config.logging.level,
-        log_file=Path(container.config.logging.file),
-        console=True,
-        rotation=container.config.logging.rotation,
-        retention_days=container.config.logging.retention_days,
-    )
-    
-    # Disable console handlers if not verbose
-    if not verbose:
-        import sys
-        logger.logger.handlers = [
-            h for h in logger.logger.handlers 
-            if not (isinstance(h, logging.StreamHandler) and h.stream == sys.stderr)
-        ]
+
+    # Configure logger verbosity
+    _configure_logger_verbosity(container, verbose)
 
     # Use config values if not specified
     if top_k is None:
@@ -439,6 +464,9 @@ def review_command(
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             ]
         
+        # Track failed files for summary reporting
+        failed_files = []
+
         with Progress(
             *progress_columns,
             console=console,
@@ -607,18 +635,21 @@ def review_command(
                     # For directory scan, show warning and continue
                     error_type = type(e).__name__
                     error_message = str(e) if str(e) else "Unknown error"
-                    
+
+                    # Track failed file for summary
+                    failed_files.append((file_path, f"{error_type}: {error_message[:100]}"))
+
                     # Always show at least the error type and message
                     console.print(f"\n[yellow]⚠ Warning: Failed to analyze {file_path.name}[/yellow]")
                     console.print(f"[dim]Error: {error_type}: {error_message[:200]}[/dim]")
-                    
+
                     if verbose:
                         error_msg = ErrorPresenter.present(e, verbose=True)
                         console.print(error_msg)
                     else:
                         # In non-verbose mode, suggest using -v for more details
                         console.print(f"[dim]Run with -v flag for detailed error information[/dim]")
-                    
+
                     progress.advance(task)
                     continue
 
@@ -630,6 +661,17 @@ def review_command(
                     description="[green]Security Review complete!",
                     completed=len(files)
                 )
+
+        # Display summary of failed files if any
+        if failed_files:
+            console.print("")
+            console.print(f"[yellow]⚠ {len(failed_files)} file(s) failed analysis:[/yellow]")
+            # Show first 5 failed files
+            for failed_path, error in failed_files[:5]:
+                console.print(f"  [dim]• {failed_path.name}: {error}[/dim]")
+            if len(failed_files) > 5:
+                console.print(f"  [dim]... and {len(failed_files) - 5} more[/dim]")
+            console.print(f"[dim]Successfully analyzed: {len(files) - len(failed_files)}/{len(files)} files[/dim]")
 
         review = aggregate_review
 
@@ -760,29 +802,18 @@ def review_command(
                 review_progress = [0]
                 review_done = [False]
                 review_error = [None]
-                
+                review_start_time = time.time()  # Track start time for progress estimation
+
                 def update_review_progress_loop():
                     """Update progress bar while review is running (time-based)."""
                     import time as time_module  # Import inside function to avoid closure issues
                     while not review_done[0] and review_progress[0] < 95:
                         time_module.sleep(0.5)  # Update every 500ms
                         elapsed_time = time_module.time() - review_start_time
-                        
-                        # Estimate progress based on elapsed time
-                        # Assume average analysis takes 30-60 seconds, gradually increase
-                        if elapsed_time < 10:
-                            # First 10 seconds: 0-20%
-                            progress_pct = int((elapsed_time / 10) * 20)
-                        elif elapsed_time < 30:
-                            # 10-30 seconds: 20-60%
-                            progress_pct = 20 + int(((elapsed_time - 10) / 20) * 40)
-                        elif elapsed_time < 60:
-                            # 30-60 seconds: 60-85%
-                            progress_pct = 60 + int(((elapsed_time - 30) / 30) * 25)
-                        else:
-                            # After 60 seconds: 85-95% (slow increase)
-                            progress_pct = 85 + min(10, int((elapsed_time - 60) / 10))
-                        
+
+                        # Use helper function for consistent progress estimation
+                        progress_pct = _estimate_time_based_progress(elapsed_time)
+
                         # Estimate time remaining
                         if elapsed_time > 5:  # After 5 seconds, start estimating
                             # Rough estimate: if we're at X%, remaining is (100-X)/X * elapsed
@@ -798,7 +829,7 @@ def review_command(
                                 description = "Analyzing code..."
                         else:
                             description = "Analyzing code..."
-                        
+
                         review_progress[0] = progress_pct
                         progress.update(task, completed=progress_pct, description=description)
                 

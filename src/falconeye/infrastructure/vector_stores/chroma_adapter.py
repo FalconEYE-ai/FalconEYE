@@ -349,9 +349,24 @@ class ChromaVectorStoreAdapter(VectorStoreRepository):
             self.client.delete_collection(name=collection_name)
             if collection_name in self._collections:
                 del self._collections[collection_name]
-        except Exception:
-            # Collection might not exist
-            pass
+            self.logger.info(
+                f"Deleted collection: {collection_name}",
+                extra={"collection": collection_name}
+            )
+        except ValueError as e:
+            # Collection doesn't exist - this is expected in some cases
+            self.logger.debug(
+                f"Collection {collection_name} doesn't exist (may be expected): {e}",
+                extra={"collection": collection_name}
+            )
+        except Exception as e:
+            # Unexpected error during deletion - log and re-raise
+            self.logger.error(
+                f"Failed to delete collection {collection_name}: {e}",
+                extra={"collection": collection_name, "error": str(e)},
+                exc_info=True
+            )
+            raise
 
     async def collection_exists(self, collection: str) -> bool:
         """
