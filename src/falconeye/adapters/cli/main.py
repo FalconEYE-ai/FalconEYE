@@ -236,7 +236,6 @@ def scan(
         falconeye scan <path>              # Normal mode: Shows progress bar and final results only
         falconeye scan <path> -v           # Verbose mode: Shows full logs, LLM streaming, and detailed progress
         falconeye scan <path> --verbose    # Verbose mode: Same as -v (alternative syntax)
-        falconeye scan <path> verbose      # Verbose mode: Alternative positional argument (deprecated, use -v)
     
     Output Modes:
         Normal mode (-v not used):
@@ -252,15 +251,6 @@ def scan(
             - Detailed progress information
             - Full error details if analysis fails
     """
-    # Check if "verbose" was passed as a positional argument
-    # Typer processes arguments, so we check if "verbose" appears in sys.argv
-    if not verbose:
-        # Look for "verbose" in command line arguments (case-insensitive)
-        for arg in sys.argv:
-            if arg.lower() == "verbose":
-                verbose = True
-                break
-    
     scan_command(
         path=path,
         language=language,

@@ -482,7 +482,6 @@ def review_command(
 
                     # Create streaming callback to show LLM thought process
                     stream_buffer = []
-                    stream_lock = asyncio.Lock()
                     findings_displayed = []
                     
                     def stream_callback(token: str):
@@ -838,19 +837,6 @@ def review_command(
                 progress_thread.start()
                 
                 try:
-                    # Create streaming callback to show LLM thought process
-                    stream_buffer = []
-                    
-                    def stream_callback(token: str):
-                        """Callback to display LLM streaming tokens."""
-                        stream_buffer.append(token)
-                        # Display in real-time (only in verbose mode)
-                        if verbose:
-                            console.print(token, end="", style="dim italic")
-                    
-                    # Update command with streaming callback
-                    command.stream_callback = stream_callback if verbose else None
-                    
                     # Show progress updates during analysis
                     async def handle_with_progress_single(cmd):
                         """Wrapper to show progress during single file review."""
@@ -891,10 +877,6 @@ def review_command(
                         return await handler_task
                     
                     review = asyncio.run(handle_with_progress_single(command))
-                    
-                    # Add newline after streaming
-                    if verbose and stream_buffer:
-                        console.print("\n")
                     review_done[0] = True
                     
                     # Display findings immediately if any are found
