@@ -90,6 +90,33 @@ pip install -e .
 
 FalconEYE will use the default configuration on first run. You can customize settings by creating `~/.falconeye/config.yaml` (see [Configuration](#configuration) section).
 
+## License
+
+FalconEYE is dual-licensed under AGPLv3 and a commercial license.
+
+### AGPLv3 License
+
+Free for non-commercial use including:
+- Non-profit organizations
+- Academic research and educational institutions
+- Personal projects
+- Open source projects compliant with AGPLv3
+
+Under AGPLv3, you must share your source code and any modifications when distributing or providing FalconEYE as a network service.
+
+### Commercial License
+
+A commercial license is required for:
+- Integrating FalconEYE into proprietary or closed-source products
+- Offering FalconEYE as a commercial service or SaaS platform
+- Using FalconEYE without AGPLv3 source code sharing obligations
+
+See LICENSE-COMMERCIAL.md for details and contact information.
+
+### Full License Text
+
+See the LICENSE file for the complete AGPLv3 license text.
+
 ### Your First Scan
 
 ```bash
@@ -394,25 +421,13 @@ A: Use SARIF output format which integrates with GitHub Security, GitLab, and mo
 
 ## License
 
-Copyright (c) 2025 hardw00t h4ckologic
+FalconEYE is dual-licensed:
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+**AGPLv3:** Free for non-commercial, educational, and open source use. See LICENSE file.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+**Commercial:** Required for proprietary integration and commercial services. See LICENSE-COMMERCIAL.md.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Copyright (c) 2025 hardw00t & h4ckologic
 
 ---
 
