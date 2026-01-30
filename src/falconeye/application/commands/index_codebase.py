@@ -623,9 +623,10 @@ class IndexCodebaseHandler:
         overlap: int,
     ) -> List[CodeChunk]:
         """
-        Chunk file content.
+        Chunk file content with adaptive sizing for large files.
 
         Chunks at line boundaries, NOT arbitrary character counts.
+        For large files (>1000 lines), uses larger chunks to reduce overhead.
 
         Args:
             content: File content
@@ -638,8 +639,30 @@ class IndexCodebaseHandler:
             List of code chunks
         """
         lines = content.splitlines(keepends=True)
-        chunks = []
+        total_lines = len(lines)
 
+        # Adaptive chunking for large files
+        # For files > 1000 lines, increase chunk size to reduce chunk count
+        # This keeps analysis manageable while maintaining context
+        if total_lines > 1000:
+            # Scale chunk size: aim for ~50-75 chunks maximum for very large files
+            adaptive_chunk_size = max(chunk_size, min(200, total_lines // 50))
+            adaptive_overlap = min(overlap, adaptive_chunk_size // 5)  # Keep overlap proportional
+
+            self.logger.info(
+                "Using adaptive chunking for large file",
+                extra={
+                    "file_path": file_path,
+                    "total_lines": total_lines,
+                    "original_chunk_size": chunk_size,
+                    "adaptive_chunk_size": adaptive_chunk_size,
+                    "adaptive_overlap": adaptive_overlap,
+                }
+            )
+            chunk_size = adaptive_chunk_size
+            overlap = adaptive_overlap
+
+        chunks = []
         start = 0
         chunk_index = 0
 
@@ -689,6 +712,16 @@ class IndexCodebaseHandler:
             )
             for chunk in chunks
         ]
+
+        self.logger.info(
+            "File chunking completed",
+            extra={
+                "file_path": file_path,
+                "total_lines": total_lines,
+                "chunk_count": len(chunks),
+                "avg_chunk_size": total_lines // len(chunks) if chunks else 0,
+            }
+        )
 
         return chunks
 

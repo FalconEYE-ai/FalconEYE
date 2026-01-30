@@ -79,14 +79,38 @@ FalconEYE follows a sophisticated analysis pipeline:
 
 ### Installation
 
+**Option 1: Automated Installation (Recommended)**
+
 ```bash
 # Pull required AI models
 ollama pull qwen3-coder:30b
 ollama pull embeddinggemma:300m
 
+# Run installation script (handles virtual environment and dependencies)
+./install.sh
+```
+
+**Option 2: Manual Installation**
+
+```bash
+# Pull required AI models
+ollama pull qwen3-coder:30b
+ollama pull embeddinggemma:300m
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install with locked dependencies (avoids chromadb/onnxruntime conflicts)
+pip install -r requirements.txt
+
 # Install FalconEYE
 pip install -e .
 ```
+
+**Troubleshooting Dependencies**
+
+If you encounter ChromaDB or onnxruntime dependency conflicts, see [DEPENDENCY_TROUBLESHOOTING.md](DEPENDENCY_TROUBLESHOOTING.md) for solutions.
 
 FalconEYE will use the default configuration on first run. You can customize settings by creating `~/.falconeye/config.yaml` (see [Configuration](#configuration) section).
 

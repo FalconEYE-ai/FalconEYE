@@ -62,16 +62,20 @@ class PromptContext:
 
         return context
 
-    def format_for_ai(self) -> str:
+    def format_for_ai(self, max_code_lines: int = 10000) -> str:
         """
         Format context into a comprehensive prompt for AI.
 
         The AI uses this context to understand the code deeply
         and identify security vulnerabilities through reasoning,
         NOT through pattern matching.
+
+        Args:
+            max_code_lines: Maximum number of code lines to include in prompt
+                           (prevents exceeding LLM context window for very large files)
         """
         # Add line numbers to code snippet for AI to reference
-        numbered_code = self._add_line_numbers(self.code_snippet)
+        numbered_code = self._add_line_numbers(self.code_snippet, max_lines=max_code_lines)
 
         parts = [
             f"FILE: {self.file_path}",
@@ -131,21 +135,37 @@ class PromptContext:
 
         return "\n".join(parts)
 
-    def _add_line_numbers(self, code: str) -> str:
+    def _add_line_numbers(self, code: str, max_lines: int = 10000) -> str:
         """
         Add line numbers to code for AI to reference.
 
         This allows the AI to provide accurate line_start and line_end
-        in its findings.
+        in its findings. For very large files, truncates to prevent
+        exceeding LLM context windows.
 
         Args:
             code: Code snippet
+            max_lines: Maximum lines to include (truncates if exceeded)
 
         Returns:
             Code with line numbers prepended to each line
         """
         lines = code.splitlines()
+
+        # Handle very large files by truncating with a note
+        if len(lines) > max_lines:
+            truncated_count = len(lines) - max_lines
+            lines = lines[:max_lines]
+            truncation_note = f"\n... [Truncated {truncated_count} lines for context window management] ...\n"
+        else:
+            truncation_note = ""
+
         numbered_lines = []
         for i, line in enumerate(lines, start=1):
             numbered_lines.append(f"{i:4d} | {line}")
-        return "\n".join(numbered_lines)
+
+        result = "\n".join(numbered_lines)
+        if truncation_note:
+            result += truncation_note
+
+        return result

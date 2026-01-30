@@ -44,6 +44,9 @@ chunking:
   default_size: 50  # Default lines per chunk
   default_overlap: 10  # Default lines of overlap
   max_chunk_size: 200  # Maximum lines per chunk
+  # Note: For files > 1000 lines, adaptive chunking automatically increases
+  # chunk size to maintain performance. Large files (5000+ lines) will use
+  # ~100-200 line chunks to keep total chunk count manageable (~50 chunks max)
 
 # Analysis Settings
 analysis:
