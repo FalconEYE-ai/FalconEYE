@@ -3,8 +3,8 @@
 ```
 ███████╗ █████╗ ██╗      ██████╗ ██████╗ ███╗   ██╗███████╗██╗   ██╗███████╗
 ██╔════╝██╔══██╗██║     ██╔════╝██╔═══██╗████╗  ██║██╔════╝╚██╗ ██╔╝██╔════╝
-█████╗  ███████║██║     ██║     ██║   ██║██╔██╗ ██║█████╗   ╚████╔╝ █████╗  
-██╔══╝  ██╔══██║██║     ██║     ██║   ██║██║╚██╗██║██╔══╝    ╚██╔╝  ██╔══╝  
+█████╗  ███████║██║     ██║     ██║   ██║██╔██╗ ██║█████╗   ╚████╔╝ █████╗
+██╔══╝  ██╔══██║██║     ██║     ██║   ██║██║╚██╗██║██╔══╝    ╚██╔╝  ██╔══╝
 ██║     ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║███████╗   ██║   ███████╗
 ╚═╝     ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚══════╝
 ```
@@ -13,69 +13,98 @@
 
 *by hardw00t & h4ckologic*
 
-FalconEYE represents a paradigm shift in static code analysis. Instead of relying on predefined vulnerability patterns, it leverages large language models to reason about your code the same way a security expert would—understanding context, intent, and subtle security implications that traditional tools miss.
+FalconEYE represents a paradigm shift in static code analysis. Instead of relying on predefined vulnerability patterns, it leverages large language models to reason about your code the same way a security expert would — understanding context, intent, and subtle security implications that traditional tools miss.
+
+---
+
+## Table of Contents
+
+- [Why FalconEYE?](#why-falconeye)
+- [How It Works](#how-it-works)
+- [Getting Started](#getting-started)
+- [MLX Backend (Apple Silicon)](#mlx-backend-apple-silicon)
+- [Supported Languages](#supported-languages)
+- [CLI Reference](#cli-reference)
+- [Output Formats](#output-formats)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Development](#development)
+- [FAQ](#faq)
+- [License](#license)
+
+---
 
 ## Why FalconEYE?
 
 Traditional security scanners are limited by their pattern databases. They can only find what they've been programmed to look for. FalconEYE is different:
 
-- **No Pattern Matching**: Uses pure AI reasoning to understand your code semantically
-- **Context-Aware Analysis**: Retrieval-Augmented Generation provides relevant code context for deeper insights
-- **Novel Vulnerability Detection**: Identifies security issues that don't match known patterns
-- **Reduced False Positives**: AI validation reduces noise from pattern-based false alarms
-- **Rich HTML Reports**: Auto-generated interactive reports with executive dashboards and statistics
-- **Smart & Fast**: Incremental analysis means re-scans only process changed files
-- **Privacy-First**: Runs entirely locally with Ollama—your code never leaves your machine
+- **No Pattern Matching** — Uses pure AI reasoning to understand your code semantically
+- **Context-Aware Analysis** — Retrieval-Augmented Generation (RAG) provides relevant code context for deeper insights
+- **Novel Vulnerability Detection** — Identifies security issues that don't match known patterns
+- **LLM-Powered Enrichment** — Every finding gets AI-generated descriptions, mitigations, code snippets, and line numbers
+- **Reduced False Positives** — Optional AI validation pass filters noise from false alarms
+- **Rich Reporting** — Console, JSON, HTML, and SARIF output with interactive dashboards
+- **Smart Re-indexing** — Incremental analysis means re-scans only process changed files
+- **Privacy-First** — Runs entirely locally with Ollama or MLX — your code never leaves your machine
+- **Apple Silicon Accelerated** — Native MLX backend delivers 20-40% faster inference on M-series chips
+
+---
 
 ## How It Works
 
-FalconEYE follows a sophisticated analysis pipeline:
+FalconEYE follows a multi-stage analysis pipeline:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     1. CODE INGESTION                            │
-│  Scans repository → Detects languages → Parses AST structure    │
+│                     1. CODE INGESTION                          │
+│  Scans repository -> Detects languages -> Parses AST structure │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
-│                    2. INTELLIGENT INDEXING                       │
-│  Chunks code semantically → Generates embeddings → Stores in    │
-│  vector database for fast semantic search                       │
+│                    2. INTELLIGENT INDEXING                      │
+│  Chunks code semantically -> Generates embeddings -> Stores in │
+│  vector database for fast semantic search                      │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
-│                   3. CONTEXT ASSEMBLY (RAG)                      │
-│  For each code segment → Retrieves similar code → Gathers       │
-│  relevant context from your entire codebase                     │
+│                   3. CONTEXT ASSEMBLY (RAG)                     │
+│  For each code segment -> Retrieves similar code -> Gathers    │
+│  relevant context from your entire codebase                    │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
-│                    4. AI SECURITY ANALYSIS                       │
-│  LLM analyzes code with context → Reasons about vulnerabilities │
-│  → Understands data flow → Identifies security implications     │
+│                    4. AI SECURITY ANALYSIS                      │
+│  LLM analyzes code with context -> Reasons about vulns ->      │
+│  Understands data flow -> Identifies security implications     │
 └──────────────────────────────┬──────────────────────────────────┘
                                │
 ┌──────────────────────────────▼──────────────────────────────────┐
-│                     5. VALIDATION & REPORTING                    │
-│  Optional AI validation pass → Formats findings → Outputs in    │
-│  Console/JSON/SARIF format with actionable remediation          │
+│                   5. LLM-POWERED ENRICHMENT                    │
+│  Incomplete findings sent back to the LLM for detailed         │
+│  reasoning, specific mitigations, code snippets & line numbers │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────────┐
+│                     6. VALIDATION & REPORTING                  │
+│  Optional AI validation pass -> Formats findings -> Outputs in │
+│  Console/JSON/HTML/SARIF format with actionable remediation    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### What Makes This Special?
-
-**Semantic Understanding**: FalconEYE doesn't just scan for known patterns. It reads your code like a security engineer would, understanding business logic, data flows, and architectural patterns to identify real vulnerabilities.
-
-**Smart Re-indexing**: After the initial scan, FalconEYE tracks file changes and only re-analyzes what's changed. This makes subsequent scans dramatically faster while maintaining comprehensive coverage.
+**Semantic Understanding**: FalconEYE reads your code like a security engineer, understanding business logic, data flows, and architectural patterns to identify real vulnerabilities.
 
 **RAG-Enhanced Analysis**: By retrieving similar code patterns from your entire codebase, the AI gets crucial context about how functions are used, what data they handle, and potential security implications across your application.
+
+**LLM-Powered Enrichment**: When the initial analysis produces incomplete findings (missing line numbers, generic descriptions, or vague mitigations), FalconEYE sends them back to the LLM with the full source code for enrichment. Every displayed finding includes specific line numbers, the vulnerable code snippet, a detailed description of the exploit, and actionable remediation referencing actual identifiers from your code.
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-1. **Python 3.12+** installed
-2. **Ollama** running locally ([Install Ollama](https://ollama.ai))
+- **Python 3.12+**
+- **Ollama** running locally ([Install Ollama](https://ollama.ai))
 
 ### Installation
 
@@ -88,311 +117,320 @@ ollama pull embeddinggemma:300m
 pip install -e .
 ```
 
-FalconEYE will use the default configuration on first run. You can customize settings by creating `~/.falconeye/config.yaml` (see [Configuration](#configuration) section).
+### Apple Silicon Installation (MLX)
 
-## License
+For native Apple Silicon acceleration:
 
-FalconEYE is dual-licensed under AGPLv3 and a commercial license.
+```bash
+# Pull embedding model (still required -- MLX uses Ollama for embeddings)
+ollama pull embeddinggemma:300m
 
-### AGPLv3 License
+# Install FalconEYE with MLX support
+pip install -e ".[mlx]"
+```
 
-Free for non-commercial use including:
-- Non-profit organizations
-- Academic research and educational institutions
-- Personal projects
-- Open source projects compliant with AGPLv3
-
-Under AGPLv3, you must share your source code and any modifications when distributing or providing FalconEYE as a network service.
-
-### Commercial License
-
-A commercial license is required for:
-- Integrating FalconEYE into proprietary or closed-source products
-- Offering FalconEYE as a commercial service or SaaS platform
-- Using FalconEYE without AGPLv3 source code sharing obligations
-
-See LICENSE-COMMERCIAL.md for details and contact information.
-
-### Full License Text
-
-See the LICENSE file for the complete AGPLv3 license text.
+> **Note**: MLX requires an Apple Silicon Mac (M1/M2/M3/M4). The MLX backend uses a hybrid approach — MLX handles LLM inference while Ollama handles embeddings. Ollama must still be running for the indexing step. The MLX analysis model is downloaded automatically from HuggingFace on first use.
 
 ### Your First Scan
 
 ```bash
-# Index your codebase (one-time operation)
-falconeye index /path/to/your/project
-
-# Analyze for vulnerabilities
-falconeye review /path/to/your/project
-
-# Or do both in one command
+# Full scan (index + review in one step)
 falconeye scan /path/to/your/project
+
+# Or run the steps separately:
+falconeye index /path/to/your/project     # Index codebase (one-time)
+falconeye review /path/to/your/project    # Analyze for vulnerabilities
+
+# Scan with MLX backend on Apple Silicon
+falconeye scan /path/to/your/project --backend mlx
+
+# Generate an HTML report
+falconeye scan /path/to/your/project --format html --output report.html
+
+# Verbose mode -- see LLM streaming and full logs
+falconeye scan /path/to/your/project -v
 ```
 
-## Usage Examples
+---
 
-### Single File Analysis
+## MLX Backend (Apple Silicon)
+
+FalconEYE supports native Apple Silicon inference via [MLX](https://github.com/ml-explore/mlx), Apple's machine learning framework optimized for the unified memory architecture and Neural Engine of M-series chips.
+
+### Performance Benefits
+
+MLX delivers significant performance improvements over Ollama (which uses llama.cpp internally) on Apple Silicon hardware:
+
+| Metric | Improvement | Details |
+|--------|-------------|---------|
+| **Token Generation** | **20-40% faster** | MLX runs inference directly on the Apple GPU/Neural Engine. On MoE models like Qwen3-30B-A3B, benchmarks show 17-43% higher tok/s vs llama.cpp. Smaller models see up to 87% gains. |
+| **Memory Usage** | **~30% lower RAM** | Zero-copy unified memory eliminates data duplication between CPU and GPU. Lazy evaluation fuses operations and reduces allocation overhead. |
+| **First-Token Latency** | **~50% lower** | In-process inference removes the HTTP round-trip overhead of Ollama's REST API on localhost:11434. |
+| **Prompt Processing** | **~25% faster prefill** | Native Metal compute path vs llama.cpp's Metal abstraction layer. |
+| **Model Availability** | **Broader selection** | Access thousands of quantized models from HuggingFace's `mlx-community`, compared to Ollama's curated library. |
+
+> Figures based on published benchmarks of MLX vs llama.cpp on M-series chips (Barrios et al., arXiv:2601.19139; arXiv:2511.05502; Google Cloud Community Gemma 3 benchmarks). Actual results vary by model size, quantization level, and hardware generation.
+
+**When to use MLX:**
+- You have an Apple Silicon Mac (M1/M2/M3/M4)
+- You want faster scan times and lower memory consumption
+- You want access to the latest quantized models from HuggingFace
+
+**When to stick with Ollama:**
+- Cross-platform deployment (Linux, Intel Mac, Windows via WSL)
+- You prefer Ollama's curated model library and CLI tooling
+- Running on non-Apple hardware
+
+### Hybrid Architecture
+
+The MLX backend uses a hybrid approach because MLX does not natively support embedding models:
+
+```
+                 ┌──────────────────────────┐
+                 │      FalconEYE CLI       │
+                 └────────────┬─────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+    ┌─────────▼──────────┐        ┌──────────▼──────────┐
+    │   MLX (Analysis)   │        │  Ollama (Embeddings) │
+    │                    │        │                      │
+    │  Qwen3-Coder-30B  │        │  embeddinggemma:300m │
+    │  4-bit quantized   │        │                      │
+    │  Apple Silicon GPU │        │  localhost:11434     │
+    └────────────────────┘        └──────────────────────┘
+```
+
+- **Inference**: MLX loads a quantized model directly into unified memory and runs on the Apple GPU/Neural Engine. Zero-copy memory access eliminates transfer overhead.
+- **Embeddings**: Ollama handles embedding generation during the indexing step. Ollama must be running when you use `falconeye index` or `falconeye scan`.
+
+### MLX Model Configuration
+
+The default model is `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit` — a Mixture-of-Experts model (30B total / 3B active parameters, 4-bit quantized). You can change the model in your config:
+
+```yaml
+llm:
+  provider: mlx
+  mlx:
+    analysis: mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit
+```
+
+Any MLX-compatible model from HuggingFace's `mlx-community` namespace can be used. The model is downloaded and cached automatically on first use.
+
+### Checking MLX Availability
 
 ```bash
-$ falconeye scan ./myapp
-
-███████╗ █████╗ ██╗      ██████╗ ██████╗ ███╗   ██╗███████╗██╗   ██╗███████╗
-██╔════╝██╔══██╗██║     ██╔════╝██╔═══██╗████╗  ██║██╔════╝╚██╗ ██╔╝██╔════╝
-█████╗  ███████║██║     ██║     ██║   ██║██╔██╗ ██║█████╗   ╚████╔╝ █████╗  
-██╔══╝  ██╔══██║██║     ██║     ██║   ██║██║╚██╗██║██╔══╝    ╚██╔╝  ██╔══╝  
-██║     ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║███████╗   ██║   ███████╗
-╚═╝     ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚══════╝
-
-                        Security Code Review
-                     v2.0 - AI-Powered Analysis
-                     by hardw00t & h4ckologic
-
-Indexing codebase...
-Indexed 127 files in 8.3s
-
-Analyzing for vulnerabilities...
-Found 12 potential issues
-
-Results saved to: falconeye_reports/falconeye_myapp_20251113_130425.html
+falconeye info
 ```
 
-## Key Features
+The `info` command shows whether your system supports MLX, including Apple Silicon detection and package availability.
 
-### AI-Powered Analysis
-- **Semantic Code Understanding**: Goes beyond pattern matching to understand intent and data flow
-- **RAG-Enhanced Context**: Retrieves similar code patterns from your entire codebase
-- **Confidence Scoring**: AI rates its confidence in each finding
-- **CWE Mapping**: Maps vulnerabilities to Common Weakness Enumeration
+---
 
-### Enhanced CLI Experience
-- **ASCII Art Banner**: Stylish cyan-themed banner on every command
-- **Rich Console Output**: Color-coded terminal output with progress indicators
-- **Smart Error Messages**: Clear, actionable error messages with solutions
-- **Graceful Degradation**: Continues analysis even when individual files fail
+## Supported Languages
 
-### Robust Processing
-- **Advanced JSON Parsing**: Multi-layer escape sequence fixing for AI responses
-- **Automatic Line Numbers**: Populates line numbers from source files
-- **Context Expansion**: Automatically expands code snippets with surrounding context
-- **Debug File Generation**: Saves problematic responses for troubleshooting
+FalconEYE analyzes code in 10 languages with language-specific security knowledge:
 
-### Multiple Output Formats
-- **Console**: Rich, color-coded terminal output
-- **JSON**: Machine-readable format for CI/CD integration
-- **HTML**: Interactive reports with executive summaries
-- **SARIF**: Industry-standard format for security platforms
+| Language | Extensions | Key Vulnerability Categories |
+|----------|-----------|------------------------------|
+| **Python** | `.py`, `.pyw` | Command/code injection, pickle deserialization, SSRF, Django/Flask/FastAPI issues |
+| **JavaScript / TypeScript** | `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs` | XSS, prototype pollution, eval injection, Node.js/React/Express issues |
+| **Go** | `.go` | Command injection, SQL injection, race conditions, goroutine leaks |
+| **Rust** | `.rs` | Unsafe blocks, FFI issues, integer overflow, Actix/Axum/Rocket issues |
+| **C / C++** | `.c`, `.cpp`, `.cc`, `.cxx`, `.h`, `.hpp`, `.hxx` | Buffer overflow, format strings, use-after-free, memory corruption |
+| **Java** | `.java` | SQL injection, deserialization, XXE, Spring/Hibernate issues |
+| **PHP** | `.php`, `.phtml`, `.php3`-`.php5`, `.phps` | SQL injection, type juggling, RCE, Laravel/WordPress issues |
+| **Ruby** | `.rb`, `.rake`, `.gemspec`, `Gemfile`, `Rakefile` | YAML deserialization, mass assignment, eval/send injection, Rails issues |
+| **Dart** | `.dart` | Insecure HTTP, hardcoded secrets, path traversal, Flutter issues |
 
-### Performance
-- **Incremental Scanning**: Only re-analyzes changed files after initial scan
-- **Parallel Processing**: Batch processing for faster analysis
-- **Smart Caching**: Reuses embeddings and context when possible
-- **Optimized Chunking**: Intelligent code segmentation for better context
+Each language has a dedicated plugin with tailored security prompts, vulnerability categories, and framework-specific context. New languages can be added by implementing the `LanguagePlugin` interface.
+
+---
+
+## CLI Reference
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `falconeye scan <path>` | Index and review in one step |
+| `falconeye index <path>` | Index codebase for analysis |
+| `falconeye review <path>` | Analyze code for vulnerabilities |
+| `falconeye info` | System and configuration information |
+| `falconeye config --init` | Create default configuration file |
+| `falconeye projects list` | Show all indexed projects |
+| `falconeye projects info <id>` | Display project details |
+| `falconeye projects delete <id>` | Delete a project and its data |
+| `falconeye projects cleanup <id>` | Remove orphaned project data |
+
+### Common Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--backend` | `-b` | LLM backend: `ollama` (default) or `mlx` |
+| `--verbose` | `-v` | Detailed output with LLM streaming and full logs |
+| `--language` | `-l` | Programming language (auto-detected if omitted) |
+| `--config` | `-c` | Path to configuration file |
+| `--format` | `-o` | Output format: `console`, `json`, `html`, `sarif` |
+| `--output-file` | | Save results to a specific file |
+| `--validate` | | Enable AI validation pass to reduce false positives |
+| `--top-k` | | Number of similar code chunks for RAG context (default: 5) |
+| `--severity` | | Minimum severity to report: `critical`, `high`, `medium`, `low` |
+| `--force-reindex` | | Force re-index all files (ignore cache) |
+| `--exclude` | `-e` | Glob patterns to exclude (repeatable) |
+
+### Examples
 
 ```bash
-# Human-readable console output
-falconeye review src/ --format console
+# Full scan with MLX backend
+falconeye scan ./src --backend mlx
 
-# Machine-readable JSON (auto-generates HTML report too)
-falconeye review src/ --format json --output findings.json
+# Review with AI validation and HTML output
+falconeye review ./src --validate --format html --output report.html
 
-# HTML report with interactive dashboard
-falconeye review src/ --format html --output report.html
+# Scan with verbose output (see LLM reasoning in real-time)
+falconeye scan ./src -v
 
-# SARIF for CI/CD integration
-falconeye review src/ --format sarif --output results.sarif
+# Filter findings by severity
+falconeye review ./src --severity high
+
+# SARIF output for CI/CD integration
+falconeye review ./src --format sarif --output results.sarif
+
+# Force re-index and scan
+falconeye scan ./src --force-reindex
+
+# Exclude test directories
+falconeye scan ./src --exclude "tests/*" --exclude "vendor/*"
 ```
 
-**Default Behavior**: When no output file is specified, FalconEYE automatically saves both JSON and HTML reports to `./falconeye_reports/` with timestamps:
-```bash
-falconeye scan /path/to/project
-# Generates:
-# - falconeye_project_20251112_171500.json
-# - falconeye_project_20251112_171500.html
+### Verbose Mode
+
+**Normal mode** (default): Clean progress bar with file count and percentage. Findings are displayed after LLM enrichment completes with full details.
+
+**Verbose mode** (`-v`): Full indexing logs, LLM thought process streaming, detailed progress information, and complete error stack traces.
+
+---
+
+## Output Formats
+
+### Console
+Color-coded terminal output with Rich formatting:
+```
+╭─ SQL Injection Vulnerability ────────────────────────────────╮
+│ Severity: HIGH | CWE-89                                     │
+│ File: app/database.py (lines 42-45)                         │
+│                                                             │
+│ The function executes raw SQL with user input without       │
+│ parameterization, allowing SQL injection attacks.           │
+│                                                             │
+│ Recommendation:                                             │
+│ Replace the string concatenation in `execute_query()` at    │
+│ line 43 with parameterized queries using `cursor.execute(   │
+│ "SELECT * FROM users WHERE id = ?", (user_id,))`.          │
+╰─────────────────────────────────────────────────────────────╯
 ```
 
-### Project Management
+### JSON
+Machine-readable format for CI/CD integration and programmatic processing.
 
-```bash
-# View all indexed projects
-falconeye projects list
+### HTML
+Interactive reports with executive summaries, severity charts, and detailed finding cards. Auto-generated alongside JSON when no output file is specified.
 
-# Get detailed project statistics
-falconeye projects info <project-id>
+### SARIF
+Industry-standard format for GitHub Security, GitLab, and DevSecOps platforms.
 
-# Clean up old projects
-falconeye projects delete <project-id>
-```
+**Default behavior**: When no output file is specified, FalconEYE saves both JSON and HTML reports to `./falconeye_reports/` with timestamps.
+
+---
 
 ## Configuration
 
-FalconEYE uses a hierarchical configuration system. Configuration files are loaded in this order (later files override earlier ones):
+FalconEYE uses a hierarchical configuration system. Files are loaded in order (later overrides earlier):
 
 1. Default config: `<install-dir>/config.yaml`
 2. User config: `~/.falconeye/config.yaml`
 3. Project config: `./falconeye.yaml`
 
-Create `~/.falconeye/config.yaml` to customize settings:
+Create `~/.falconeye/config.yaml` to customize:
 
 ```yaml
 llm:
-  provider: ollama
+  provider: ollama                  # LLM provider: "ollama" or "mlx"
   model:
     analysis: qwen3-coder:30b      # AI model for security analysis
     embedding: embeddinggemma:300m  # Model for code embeddings
   base_url: http://localhost:11434
   timeout: 600                      # Request timeout in seconds
+  mlx:
+    analysis: mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit  # MLX model
 
 analysis:
-  top_k_context: 5          # Number of similar code chunks to retrieve
+  top_k_context: 5          # Number of similar code chunks for RAG context
   validate_findings: true    # Enable AI validation pass
-  batch_size: 10            # Files to process in parallel
+  batch_size: 10            # Files per batch
+
+output:
+  default_format: json      # console, json, html, sarif
+  color: true               # Color-coded console output
+  output_directory: ./falconeye_reports
 
 logging:
   level: INFO               # DEBUG, INFO, WARNING, ERROR, CRITICAL
-  file: ./falconeye.log     # Log file path
-  console: true             # Enable console logging
-  rotation: daily           # Log rotation strategy
-  retention_days: 30        # Days to retain logs
+  file: ./falconeye.log
+  console: true
+  rotation: daily
+  retention_days: 30
 ```
 
 See the [default config.yaml](config.yaml) for all available options.
 
-## Supported Languages
+---
 
-FalconEYE analyzes code in multiple languages with language-specific security knowledge:
+## Architecture
 
-**Currently Supported:**
-Python • JavaScript • TypeScript • Go • Rust • C/C++ • Java • Dart • PHP
+FalconEYE follows hexagonal (ports and adapters) architecture for clean separation of concerns:
 
-**Extensible Plugin System:**
-Add new languages by implementing language-specific plugins with tailored security prompts.
-
-## Understanding the Output
-
-FalconEYE supports multiple output formats for different use cases:
-
-### Console Format
-Interactive terminal output with color-coded severity levels:
 ```
-╭─ SQL Injection Vulnerability ────────────────────────────────╮
-│ Severity: HIGH | CWE-89                                       │
-│ File: app/database.py:42                                      │
-│                                                               │
-│ The function executes raw SQL with user input without        │
-│ parameterization, allowing SQL injection attacks.            │
-│                                                               │
-│ Recommendation:                                               │
-│ Use parameterized queries or an ORM to safely handle user    │
-│ input in database operations.                                │
-╰───────────────────────────────────────────────────────────────╯
-```
-
-### JSON Format
-Machine-readable format for CI/CD integration and programmatic processing:
-```json
-{
-  "findings": [
-    {
-      "id": "uuid",
-      "issue": "SQL Injection Vulnerability",
-      "severity": "high",
-      "confidence": {"value": "high", "level": "high"},
-      "location": {
-        "file_path": "app/database.py",
-        "line_start": 42,
-        "line_end": 45
-      },
-      "code_snippet": "...",
-      "reasoning": "...",
-      "mitigation": "Use parameterized queries...",
-      "cwe_id": "CWE-89"
-    }
-  ]
-}
+┌──────────────────────────────────────────────────────────────┐
+│                      ADAPTERS LAYER                          │
+│  CLI (Typer)  |  Console/HTML/JSON/SARIF Formatters          │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│                    APPLICATION LAYER                          │
+│  IndexCodebaseCommand  |  ReviewFileCommand                  │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│                      DOMAIN LAYER                            │
+│  SecurityAnalyzer  |  ContextAssembler  |  Models  |  Ports  │
+└──────────────────────────┬───────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────┐
+│                   INFRASTRUCTURE LAYER                        │
+│  Ollama Adapter  |  MLX Adapter  |  ChromaDB  |  Plugins     │
+│  Config Loader   |  DI Container |  Language Detection       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## CLI Command Reference
-
-| Command | Description |
-|---------|-------------|
-| `falconeye index <path>` | Index codebase for analysis |
-| `falconeye review <path>` | Analyze code for vulnerabilities |
-| `falconeye scan <path>` | Index and review in one step |
-| `falconeye scan <path> -v` | Scan with verbose output (full logs + LLM streaming) |
-| `falconeye projects list` | Show all indexed projects |
-| `falconeye projects info <id>` | Display project details |
-| `falconeye projects delete <id>` | Delete a project and its data |
-| `falconeye projects cleanup` | Remove orphaned project data |
-| `falconeye info` | System and configuration information |
-
-### Verbose Mode (`-v` or `--verbose`)
-
-The verbose flag enables detailed output for better visibility into the analysis process:
-
-**Normal Mode** (default):
-- Clean progress bar showing file count and percentage
-- Real-time findings display as they're detected
-- Final summary with all results
-- Minimal log output
-
-**Verbose Mode** (`-v`):
-- Full indexing logs (file processing, chunking, embedding generation)
-- LLM thought process streaming (see AI analysis in real-time)
-- All security analysis logs and details
-- Detailed progress information
-- Complete error stack traces if analysis fails
-
-**Examples:**
-```bash
-# Normal mode - clean output
-falconeye scan ./src
-
-# Verbose mode - detailed output with LLM streaming
-falconeye scan ./src -v
-
-# Alternative verbose syntax
-falconeye scan ./src --verbose
-```
-
-Run `falconeye --help` or `falconeye scan --help` for complete documentation.
-
-### Areas for Contribution
-- **Language Support**: Add support for new programming languages
-- **Output Formats**: Implement new report formats (PDF, CSV, etc.)
-- **HTML Templates**: Create custom report templates
-- **Integrations**: Build integrations with security platforms
-- **Performance**: Optimize analysis speed and memory usage
-- **Documentation**: Improve guides and examples
-
-### Pull Request Process
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Update documentation
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to your branch (`git push origin feature/amazing-feature`)
-9. Open a Pull Request
-
-- **Domain Layer**: Pure business logic for security analysis
-- **Application Layer**: Orchestrates use cases and workflows
-- **Infrastructure Layer**: Handles external systems (LLM, storage, parsing)
-- **Adapters Layer**: User interfaces and output formatting
-
-**Production-Ready Features:**
-
-- Circuit breaker pattern prevents cascade failures
-- Exponential backoff retry logic handles transient errors
+**Key design decisions:**
+- Domain layer defines abstract ports (`LLMService`, `VectorStore`); infrastructure provides concrete adapters
+- DI container wires everything together with a factory pattern (`backend_override` selects MLX or Ollama)
+- Language plugins are self-contained: each provides security prompts, vulnerability categories, framework context, and chunking strategies
+- Circuit breaker and retry patterns protect against LLM failures
 - Structured JSON logging with correlation IDs
-- Thread-safe context management
+
+---
 
 ## Development
 
 ```bash
 # Install with development dependencies
 pip install -e ".[dev]"
+
+# Install with MLX support (Apple Silicon)
+pip install -e ".[mlx]"
 
 # Run test suite
 pytest
@@ -401,31 +439,38 @@ pytest
 pytest tests/integration/ -v
 ```
 
-## Frequently Asked Questions
+---
+
+## FAQ
 
 **Q: Does my code get sent to external services?**
-A: No. FalconEYE runs entirely locally using Ollama. Your code never leaves your machine.
+A: No. FalconEYE runs entirely locally using Ollama or MLX. Your code never leaves your machine.
 
 **Q: How accurate is AI-based analysis compared to traditional scanners?**
-A: FalconEYE complements traditional tools. It excels at finding context-dependent vulnerabilities and novel patterns that signature-based tools miss, while the AI validation reduces false positives.
-
-**Q: How long does analysis take?**
-A: Initial indexing depends on codebase size. Subsequent scans with smart re-indexing only process changed files, making them significantly faster.
+A: FalconEYE complements traditional tools. It excels at finding context-dependent vulnerabilities and novel patterns that signature-based tools miss. The LLM enrichment pass ensures every finding includes specific details, and the optional AI validation pass reduces false positives.
 
 **Q: Can I use different AI models?**
-A: Yes. Configure any Ollama-compatible model in your config file.
+A: Yes. Configure any Ollama-compatible model in your config file. On Apple Silicon, you can also use any MLX-compatible model from HuggingFace's `mlx-community` namespace by setting `--backend mlx`.
+
+**Q: What is the MLX backend and why should I use it?**
+A: MLX is Apple's ML framework for Apple Silicon. It provides 20-40% faster inference, ~30% lower memory usage, and ~50% lower first-token latency compared to Ollama by leveraging unified memory and running inference directly on the GPU/Neural Engine without HTTP overhead. Use `--backend mlx` or set `provider: mlx` in your config.
+
+**Q: How does FalconEYE handle incomplete findings from local models?**
+A: Local models (especially smaller quantized ones) sometimes produce findings with missing line numbers, vague descriptions, or generic mitigations. FalconEYE detects incomplete findings and automatically sends them back to the LLM with the full source code for enrichment — producing specific descriptions, actionable mitigations referencing actual identifiers, code snippets, and accurate line numbers.
 
 **Q: How do I integrate this into CI/CD?**
-A: Use SARIF output format which integrates with GitHub Security, GitLab, and most DevSecOps platforms.
+A: Use SARIF output format (`--format sarif`) which integrates with GitHub Security, GitLab, and most DevSecOps platforms.
 
+**Q: How long does analysis take?**
+A: Initial indexing depends on codebase size. Subsequent scans with smart re-indexing only process changed files. Using the MLX backend on Apple Silicon reduces analysis time by 20-40% compared to Ollama.
+
+---
 
 ## License
 
-FalconEYE is dual-licensed:
+FalconEYE is licensed under the GNU Affero General Public License v3.0 or later (AGPLv3+).
 
-**AGPLv3:** Free for non-commercial, educational, and open source use. See LICENSE file.
-
-**Commercial:** Required for proprietary integration and commercial services. See LICENSE-COMMERCIAL.md.
+See the [LICENSE](LICENSE) file for the complete license text.
 
 Copyright (c) 2025 hardw00t & h4ckologic
 
@@ -433,10 +478,12 @@ Copyright (c) 2025 hardw00t & h4ckologic
 
 ## Quick Reference
 
-### Common Commands
 ```bash
 # Full scan (index + review)
 falconeye scan /path/to/project
+
+# Scan with MLX backend (Apple Silicon)
+falconeye scan /path/to/project --backend mlx
 
 # Review only (requires prior indexing)
 falconeye review /path/to/project
@@ -447,21 +494,25 @@ falconeye review /path/to/project --format html --output report.html
 # Filter by severity
 falconeye review /path/to/project --severity high
 
+# Verbose mode with LLM streaming
+falconeye scan /path/to/project -v
+
+# System information (shows MLX availability)
+falconeye info
+
 # List indexed projects
 falconeye projects list
-
-# System information
-falconeye info
 ```
 
-### Output Locations
+### Default Output Locations
 - **Reports**: `./falconeye_reports/`
 - **Logs**: `./falconeye.log`
 - **Config**: `~/.falconeye/config.yaml`
-- **Debug Files**: `/tmp/falconeye_failed_response_*.txt`
+
+---
 
 **Built for security engineers who demand more than pattern matching.**
 
-Version 2.0.0 | Python 3.12+ | Production Ready
+Version 2.0.0 | Python 3.12+ | Ollama + MLX
 
 By [hardw00t](https://github.com/hardw00t) & [h4ckologic](https://github.com/h4ckologic)

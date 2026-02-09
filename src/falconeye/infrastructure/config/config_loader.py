@@ -107,6 +107,13 @@ class ConfigLoader:
 
         return result
 
+    # Known top-level config sections that map to FalconEyeConfig fields
+    KNOWN_CONFIG_SECTIONS = {
+        "llm", "vector_store", "metadata", "index_registry",
+        "chunking", "analysis", "languages", "file_discovery",
+        "output", "logging",
+    }
+
     @staticmethod
     def _load_from_env() -> Dict[str, Any]:
         """
@@ -116,6 +123,10 @@ class ConfigLoader:
         to represent nested keys. For example:
         - FALCONEYE_LLM_BASE_URL -> llm.base_url
         - FALCONEYE_OUTPUT_COLOR -> output.color
+
+        Only variables whose first key part maps to a known config section
+        are processed. This prevents env vars like FALCONEYE_HOME from
+        polluting the config and causing validation errors.
 
         Returns:
             Configuration dictionary from environment
@@ -129,6 +140,10 @@ class ConfigLoader:
 
             # Remove prefix and convert to lowercase
             key_parts = key[len(prefix):].lower().split('_')
+
+            # Filter: only process env vars that map to known config sections
+            if key_parts[0] not in ConfigLoader.KNOWN_CONFIG_SECTIONS:
+                continue
 
             # Build nested dictionary
             current = config

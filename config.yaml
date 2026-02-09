@@ -5,10 +5,12 @@
 
 # LLM Provider Settings
 llm:
-  provider: ollama  # LLM provider (ollama, openai)
+  provider: ollama  # LLM provider (ollama, mlx)
   model:
     analysis: qwen3-coder:30b  # Model for security analysis
     embedding: embeddinggemma:300m   # Model for generating embeddings
+  mlx:
+    analysis: mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit  # HuggingFace model for MLX inference
   base_url: http://localhost:11434  # Base URL for LLM API
   timeout: 120  # Request timeout in seconds
   max_retries: 3  # [DEPRECATED] Use retry.max_retries instead

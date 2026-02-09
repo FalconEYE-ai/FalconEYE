@@ -193,7 +193,9 @@ class ContextAssembler:
             # Note: In production, LLM service should be injected
             # For now, create a temporary instance
             temp_llm = OllamaLLMAdapter()
-            query_embedding = await temp_llm.generate_embedding(code_snippet)
+            # Truncate to 2048 chars for embeddinggemma:300m context limit
+            truncated_query = code_snippet[:2048] if len(code_snippet) > 2048 else code_snippet
+            query_embedding = await temp_llm.generate_embedding(truncated_query)
 
             # Semantic search for similar code using consistent embeddings
             similar_chunks = await self.vector_store.search_similar(
@@ -261,7 +263,9 @@ class ContextAssembler:
             from ...infrastructure.llm_providers.ollama_adapter import OllamaLLMAdapter
 
             temp_llm = OllamaLLMAdapter()
-            query_embedding = await temp_llm.generate_embedding(code_snippet)
+            # Truncate to 2048 chars for embeddinggemma:300m context limit
+            truncated_query = code_snippet[:2048] if len(code_snippet) > 2048 else code_snippet
+            query_embedding = await temp_llm.generate_embedding(truncated_query)
 
             # Semantic search in documents collection
             doc_chunks = await self.vector_store.search_similar_documents(

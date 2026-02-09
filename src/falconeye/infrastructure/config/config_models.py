@@ -16,6 +16,14 @@ class LLMModelConfig(BaseModel):
     )
 
 
+class MLXModelConfig(BaseModel):
+    """MLX model configuration for Apple Silicon."""
+    analysis: str = Field(
+        default="mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+        description="HuggingFace model path for MLX inference"
+    )
+
+
 class RetryConfigModel(BaseModel):
     """Retry logic configuration."""
     max_retries: int = Field(
@@ -76,9 +84,10 @@ class LLMConfig(BaseModel):
     """LLM provider configuration."""
     provider: str = Field(
         default="ollama",
-        description="LLM provider (ollama, openai)"
+        description="LLM provider (ollama, mlx)"
     )
     model: LLMModelConfig = Field(default_factory=LLMModelConfig)
+    mlx: MLXModelConfig = Field(default_factory=MLXModelConfig)
     base_url: str = Field(
         default="http://localhost:11434",
         description="Base URL for LLM API"
@@ -103,6 +112,15 @@ class LLMConfig(BaseModel):
         default_factory=CircuitBreakerConfigModel,
         description="Circuit breaker configuration"
     )
+
+    @field_validator('provider')
+    @classmethod
+    def validate_provider(cls, v):
+        """Ensure provider is valid."""
+        valid = ["ollama", "mlx"]
+        if v not in valid:
+            raise ValueError(f"provider must be one of {valid}")
+        return v
 
 
 class VectorStoreConfig(BaseModel):

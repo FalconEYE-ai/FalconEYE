@@ -22,6 +22,27 @@ from ..formatters.formatter_factory import FormatterFactory
 from ...domain.models.security import SecurityFinding, Severity, FindingConfidence
 
 
+def _format_finding_brief(finding: SecurityFinding, console: Console, finding_number: int) -> None:
+    """
+    Show a brief real-time notification when a finding is detected during analysis.
+    Full details are displayed after LLM enrichment completes.
+    """
+    severity_colors = {
+        Severity.CRITICAL: "red",
+        Severity.HIGH: "bright_red",
+        Severity.MEDIUM: "yellow",
+        Severity.LOW: "blue",
+        Severity.INFO: "cyan",
+    }
+    color = severity_colors.get(finding.severity, "white")
+    severity_text = finding.severity.value.upper()
+    console.print(
+        f"  [dim]#{finding_number}[/dim] "
+        f"[{color}][{severity_text}][/{color}] "
+        f"[white]{finding.issue}[/white]"
+    )
+
+
 def _format_finding_realtime(finding: SecurityFinding, console: Console, finding_number: int = None) -> None:
     """
     Format and display a security finding in real-time with Rich formatting.
@@ -58,7 +79,7 @@ def _format_finding_realtime(finding: SecurityFinding, console: Console, finding
     
     # Location information
     if finding.file_path:
-        location = f"[cyan]📁 {finding.file_path}[/cyan]"
+        location = f"[cyan]{finding.file_path}[/cyan]"
         if finding.line_start:
             if finding.line_end and finding.line_end != finding.line_start:
                 location += f" [dim](lines {finding.line_start}-{finding.line_end})[/dim]"
@@ -85,7 +106,7 @@ def _format_finding_realtime(finding: SecurityFinding, console: Console, finding
     
     # Mitigation
     if finding.mitigation:
-        content_parts.append("[bold green]💡 Recommendation:[/bold green]")
+        content_parts.append("[bold green]Recommendation:[/bold green]")
         content_parts.append(f"  {finding.mitigation}")
         content_parts.append("")
     
@@ -178,7 +199,8 @@ def index_command(
     force_reindex: bool,
     config_path: Optional[str],
     verbose: bool,
-    console: Console,
+    backend: Optional[str] = None,
+    console: Console = None,
 ):
     """
     Execute index command.
@@ -193,6 +215,7 @@ def index_command(
         force_reindex: Force re-index all files
         config_path: Config file path
         verbose: Enable verbose output
+        backend: LLM backend override
         console: Rich console
     """
     if verbose:
@@ -202,7 +225,7 @@ def index_command(
         ))
 
     # Create DI container
-    container = DIContainer.create(config_path)
+    container = DIContainer.create(config_path, backend_override=backend)
 
     # Configure logger verbosity
     _configure_logger_verbosity(container, verbose)
@@ -375,7 +398,8 @@ def review_command(
     severity: Optional[str],
     config_path: Optional[str],
     verbose: bool,
-    console: Console,
+    backend: Optional[str] = None,
+    console: Console = None,
 ):
     """
     Execute review command.
@@ -390,6 +414,7 @@ def review_command(
         severity: Minimum severity
         config_path: Config file path
         verbose: Verbose output
+        backend: LLM backend override
         console: Rich console
     """
     if verbose:
@@ -399,7 +424,7 @@ def review_command(
         ))
 
     # Create DI container
-    container = DIContainer.create(config_path)
+    container = DIContainer.create(config_path, backend_override=backend)
 
     # Configure logger verbosity
     _configure_logger_verbosity(container, verbose)
@@ -492,26 +517,23 @@ def review_command(
                             console.print(token, end="", style="dim italic")
                     
                     def finding_callback(finding: SecurityFinding):
-                        """Callback to display findings as soon as they're detected."""
-                        # Stop progress bar temporarily
-                        progress.stop()
-                        
-                        # Display the finding immediately
+                        """Brief real-time notification when a finding is detected.
+                        Full details displayed after LLM enrichment completes."""
                         if finding not in findings_displayed:
                             findings_displayed.append(finding)
-                            finding_num = len(findings_displayed)
-                            console.print(f"\n[bold cyan]🔍 Finding #{finding_num} in [white]{file_path.name}[/white]:[/bold cyan]")
-                            console.print("")
-                            _format_finding_realtime(finding, console, finding_number=finding_num)
-                            console.print("")
-                        
-                        # Restart progress bar
-                        progress.start()
-                        progress.update(
-                            task,
-                            description=f"Analyzing file {file_index}/{len(files)}: {file_path.name}",
-                            completed=file_index - 1
-                        )
+                            # First finding for this file: show header
+                            if len(findings_displayed) == 1:
+                                progress.stop()
+                                console.print(f"\n[bold cyan]Vulnerabilities detected in [white]{file_path.name}[/white]:[/bold cyan]")
+                                progress.start()
+                            progress.stop()
+                            _format_finding_brief(finding, console, len(findings_displayed))
+                            progress.start()
+                            progress.update(
+                                task,
+                                description=f"Analyzing file {file_index}/{len(files)}: {file_path.name}",
+                                completed=file_index - 1
+                            )
                     
                     command = ReviewFileCommand(
                         file_path=file_path,
@@ -575,7 +597,7 @@ def review_command(
                                     last_update = current_time
                         else:
                             # In verbose mode, show a header for LLM output
-                            console.print("\n[bold cyan]🤖 AI Analysis (Streaming):[/bold cyan]")
+                            console.print("\n[bold cyan]AI Analysis (Streaming):[/bold cyan]")
                             console.print("[dim]" + "─" * 60 + "[/dim]")
                         
                         return await handler_task
@@ -586,28 +608,19 @@ def review_command(
                     if verbose and stream_buffer:
                         console.print("\n")
 
-                    # Display any findings that weren't caught incrementally
+                    # Display fully enriched findings (LLM-powered details)
                     if review.findings:
-                        # Only display findings that weren't already shown via callback
-                        new_findings = [f for f in review.findings if f not in findings_displayed]
-                        if new_findings:
-                            # Hide progress bar temporarily when displaying findings
-                            progress.stop()
-                            # Use console.print() which works alongside progress bar
-                            # Rich Progress automatically handles this correctly
-                            console.print(f"\n[bold cyan]🔍 Additional findings in [white]{file_path.name}[/white]:[/bold cyan]")
-                            console.print("")
-                            
-                            for idx, finding in enumerate(new_findings, start=len(findings_displayed) + 1):
-                                _format_finding_realtime(finding, console, finding_number=idx)
-                            
-                            # Restart progress bar
-                            progress.start()
-                            # Update progress with file count
-                            if verbose:
-                                progress.update(task, description=f"Analyzing {file_index}/{len(files)}: {file_path.name}...", completed=file_index)
-                            else:
-                                progress.update(task, description=f"Analyzing file {file_index}/{len(files)}: {file_path.name}", completed=file_index)
+                        progress.stop()
+                        console.print(f"\n[bold cyan]Enriched findings for [white]{file_path.name}[/white]:[/bold cyan]")
+                        console.print("")
+                        for idx, finding in enumerate(review.findings, start=1):
+                            _format_finding_realtime(finding, console, finding_number=idx)
+                        console.print("")
+                        progress.start()
+                        if verbose:
+                            progress.update(task, description=f"Analyzing {file_index}/{len(files)}: {file_path.name}...", completed=file_index)
+                        else:
+                            progress.update(task, description=f"Analyzing file {file_index}/{len(files)}: {file_path.name}", completed=file_index)
                     
                     # Add all findings to aggregate (including those already displayed)
                     if review.findings:
@@ -639,7 +652,7 @@ def review_command(
                     failed_files.append((file_path, f"{error_type}: {error_message[:100]}"))
 
                     # Always show at least the error type and message
-                    console.print(f"\n[yellow]⚠ Warning: Failed to analyze {file_path.name}[/yellow]")
+                    console.print(f"\n[yellow]Warning: Failed to analyze {file_path.name}[/yellow]")
                     console.print(f"[dim]Error: {error_type}: {error_message[:200]}[/dim]")
 
                     if verbose:
@@ -664,7 +677,7 @@ def review_command(
         # Display summary of failed files if any
         if failed_files:
             console.print("")
-            console.print(f"[yellow]⚠ {len(failed_files)} file(s) failed analysis:[/yellow]")
+            console.print(f"[yellow]{len(failed_files)} file(s) failed analysis:[/yellow]")
             # Show first 5 failed files
             for failed_path, error in failed_files[:5]:
                 console.print(f"  [dim]• {failed_path.name}: {error}[/dim]")
@@ -724,7 +737,7 @@ def review_command(
                         last_update = time_module.time()
                         
                         # In verbose mode, show a header for LLM output
-                        console.print("\n[bold cyan]🤖 AI Analysis (Streaming):[/bold cyan]")
+                        console.print("\n[bold cyan]AI Analysis (Streaming):[/bold cyan]")
                         console.print("[dim]" + "─" * 60 + "[/dim]")
                         
                         while not handler_task.done():
@@ -749,15 +762,14 @@ def review_command(
                     if stream_buffer:
                         console.print("\n")
                     
-                    # Display findings immediately if any are found
+                    # Display LLM-enriched findings
                     if review.findings:
-                        # Use console.print() which works alongside progress bar
-                        console.print(f"\n[bold cyan]🔍 Security Findings:[/bold cyan]")
+                        console.print(f"\n[bold cyan]Security Findings:[/bold cyan]")
                         console.print("")
-                        
+
                         for idx, finding in enumerate(review.findings, start=1):
                             _format_finding_realtime(finding, console, finding_number=idx)
-                    
+
                     progress.update(task, description="[green]Analysis complete!")
 
                 except KeyboardInterrupt:
@@ -771,7 +783,7 @@ def review_command(
                     error_type = type(e).__name__
                     error_message = str(e) if str(e) else "Unknown error"
                     
-                    console.print(f"\n[red]❌ Analysis failed for {path.name}[/red]")
+                    console.print(f"\n[red]Analysis failed for {path.name}[/red]")
                     console.print(f"[dim]Error: {error_type}: {error_message[:200]}[/dim]")
                     
                     error_msg = ErrorPresenter.present(e, verbose=verbose)
@@ -855,7 +867,7 @@ def review_command(
                         
                         # In verbose mode, show a header for LLM output
                         if verbose:
-                            console.print("\n[bold cyan]🤖 AI Analysis (Streaming):[/bold cyan]")
+                            console.print("\n[bold cyan]AI Analysis (Streaming):[/bold cyan]")
                             console.print("[dim]" + "─" * 60 + "[/dim]")
                         
                         while not handler_task.done():
@@ -881,13 +893,12 @@ def review_command(
                     
                     # Display findings immediately if any are found
                     if review.findings:
-                        # Use console.print() which works alongside progress bar
-                        console.print(f"\n[bold cyan]🔍 Security Findings:[/bold cyan]")
+                        console.print(f"\n[bold cyan]Security Findings:[/bold cyan]")
                         console.print("")
-                        
+
                         for idx, finding in enumerate(review.findings, start=1):
                             _format_finding_realtime(finding, console, finding_number=idx)
-                    
+
                     progress.update(
                         task,
                         completed=100,
@@ -960,7 +971,8 @@ def scan_command(
     force_reindex: bool,
     config_path: Optional[str],
     verbose: bool,
-    console: Console,
+    backend: Optional[str] = None,
+    console: Console = None,
 ):
     """
     Execute scan command (index + review).
@@ -975,6 +987,7 @@ def scan_command(
         force_reindex: Force re-index all files
         config_path: Config file path
         verbose: Verbose output
+        backend: LLM backend override
         console: Rich console
     """
     console.print(Panel.fit(
@@ -994,6 +1007,7 @@ def scan_command(
         force_reindex=force_reindex,
         config_path=config_path,
         verbose=verbose,
+        backend=backend,
         console=console,
     )
 
@@ -1009,6 +1023,7 @@ def scan_command(
         severity=None,
         config_path=config_path,
         verbose=verbose,
+        backend=backend,
         console=console,
     )
 
@@ -1051,6 +1066,21 @@ def info_command(config_path: Optional[str], console: Console):
                 console.print("  Status: [red]Not available[/red]")
         except Exception:
             console.print("  Status: [red]Connection failed[/red]")
+
+        # MLX info
+        console.print("\n[bold]MLX Backend (Apple Silicon):[/bold]")
+        try:
+            from ...infrastructure.llm_providers import is_apple_silicon, is_mlx_available
+            console.print(f"  Apple Silicon: {'Yes' if is_apple_silicon() else 'No'}")
+            console.print(f"  MLX Installed: {'Yes' if is_mlx_available() else 'No'}")
+            if is_apple_silicon() and is_mlx_available():
+                console.print("  Status: [green]Available[/green] (use --backend mlx)")
+            elif is_apple_silicon():
+                console.print("  Status: [yellow]Not installed[/yellow] (pip install falconeye[mlx])")
+            else:
+                console.print("  Status: [dim]Not applicable (requires Apple Silicon)[/dim]")
+        except Exception:
+            console.print("  Status: [dim]Could not determine[/dim]")
 
         # Language support
         console.print("\n[bold]Supported Languages:[/bold]")

@@ -158,19 +158,23 @@ Output Format (JSON):
 {
   "reviews": [
     {
-      "issue": "Brief, clear description of the security issue",
-      "reasoning": "Detailed explanation of why this is a vulnerability, how it can be exploited, and what the impact is. Include data flow analysis if relevant.",
-      "mitigation": "Specific, actionable remediation advice with code examples if helpful",
+      "issue": "Brief, clear title of the security vulnerability",
+      "reasoning": "Detailed description (2-3 sentences minimum): explain exactly what the vulnerability is, how an attacker could exploit it, and what the impact would be. Reference specific function names, variables, and code patterns.",
+      "mitigation": "Specific, actionable remediation: describe the exact code change needed, referencing actual identifiers from the code. Do NOT give generic advice like 'add input validation' - explain exactly what to validate and where.",
       "severity": "critical|high|medium|low|info",
       "confidence": 0.9,
-      "code_snippet": "The relevant vulnerable code snippet",
+      "code_snippet": "The exact vulnerable code lines copied from the source",
       "line_start": 42,
       "line_end": 45
     }
   ]
 }
 
-IMPORTANT: Always include line_start and line_end to indicate where the vulnerability is located in the code.
+MANDATORY FIELDS - every finding MUST include:
+- line_start and line_end: exact line numbers from the code (look at the line numbers provided)
+- reasoning: at least 2 sentences explaining the specific vulnerability and its impact
+- mitigation: specific to THIS code, referencing actual function/variable names
+- code_snippet: the actual vulnerable lines from the source
 
 If no security issues are found, return: {"reviews": []}
 

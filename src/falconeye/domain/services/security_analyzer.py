@@ -137,7 +137,10 @@ class SecurityAnalyzer:
                 findings = parsed_findings
             else:
                 findings = all_findings
-            
+
+            # Enrich incomplete findings via LLM (missing mitigation, snippet, etc.)
+            findings = await self._enrich_incomplete_findings(findings, context)
+
             # Enhance findings with line numbers and context
             findings = self._enhance_findings_with_context(findings, context)
 
@@ -422,7 +425,7 @@ class SecurityAnalyzer:
             return SecurityFinding.create(
                 issue=data.get("issue", "Unknown issue"),
                 reasoning=data.get("reasoning", ""),
-                mitigation=data.get("mitigation", ""),
+                mitigation=data.get("mitigation", "") or "",
                 severity=self._parse_severity(data.get("severity", "medium")),
                 confidence=self._parse_confidence(data.get("confidence", 0.7)),
                 file_path=file_path,
@@ -434,6 +437,246 @@ class SecurityAnalyzer:
             )
         except Exception:
             return None
+
+    def _is_finding_incomplete(self, finding: SecurityFinding) -> bool:
+        """Check if a finding has missing or generic fields that need LLM enrichment."""
+        # Missing or generic mitigation
+        if not finding.mitigation or self._is_generic_mitigation(finding.mitigation):
+            return True
+        # Short mitigation (likely not specific enough)
+        if len(finding.mitigation.strip()) < 40:
+            return True
+        # Missing code snippet
+        if not finding.code_snippet or finding.code_snippet in ("N/A", ""):
+            return True
+        # Missing or generic reasoning
+        if not finding.reasoning or finding.reasoning == "No detailed description provided.":
+            return True
+        # Short reasoning (likely not specific enough)
+        if len(finding.reasoning.strip()) < 60:
+            return True
+        # Missing line numbers
+        if finding.line_start is None:
+            return True
+        return False
+
+    async def _enrich_incomplete_findings(
+        self,
+        findings: List[SecurityFinding],
+        context: PromptContext,
+    ) -> List[SecurityFinding]:
+        """
+        Enrich findings via LLM: fill missing fields and validate severity ratings.
+
+        All findings are sent for severity validation. Incomplete findings also
+        get their missing fields (reasoning, mitigation, snippet, lines) filled.
+        """
+        if not findings:
+            return findings
+
+        # Send ALL findings for enrichment (severity validation + field completion)
+        self.logger.info(
+            f"Enriching {len(findings)} finding(s) via LLM (severity validation + field completion)",
+            extra={
+                "file_path": context.file_path,
+                "total_findings": len(findings),
+                "incomplete_count": sum(1 for f in findings if self._is_finding_incomplete(f)),
+            }
+        )
+
+        findings_to_enrich = []
+        for idx, f in enumerate(findings):
+            is_incomplete = self._is_finding_incomplete(f)
+            findings_to_enrich.append({
+                "index": idx,
+                "issue": f.issue,
+                "severity": f.severity.value,
+                "needs_field_enrichment": is_incomplete,
+                "reasoning": f.reasoning if f.reasoning != "No detailed description provided." else "",
+                "mitigation": f.mitigation if not self._is_generic_mitigation(f.mitigation) else "",
+                "code_snippet": f.code_snippet if f.code_snippet not in ("N/A", "") else "",
+                "line_start": f.line_start,
+                "line_end": f.line_end,
+            })
+
+        enrichment_system_prompt = (
+            "You are a security expert reviewing and enriching vulnerability findings.\n"
+            "You are given the SOURCE CODE with line numbers and a list of findings.\n\n"
+            "Each finding has a 'needs_field_enrichment' flag:\n"
+            "- If TRUE: provide ALL fields below (reasoning, mitigation, code_snippet, lines, adjusted_severity)\n"
+            "- If FALSE: the finding already has good fields, but you MUST still review the severity "
+            "and provide adjusted_severity\n\n"
+            "For EACH finding, provide:\n"
+            "1. reasoning: Detailed description (2-3+ sentences) - what the vuln is, how to exploit it, what the impact is\n"
+            "2. mitigation: Specific fix referencing actual function/variable names from the code\n"
+            "3. code_snippet: The exact vulnerable lines from the source\n"
+            "4. line_start / line_end: Exact line numbers from the source code\n"
+            "5. adjusted_severity: Your assessed severity after reasoning about exploitability and impact\n"
+            "6. severity_justification: Brief explanation of WHY you chose this severity level\n\n"
+            "SEVERITY ASSESSMENT - reason through these for each finding:\n"
+            "- Can a remote unauthenticated attacker exploit this directly? (if yes, likely critical/high)\n"
+            "- Does exploitation give code execution or full data access? (if yes, critical)\n"
+            "- Does it only weaken security posture without direct compromise? (if yes, medium or lower)\n"
+            "- Does it require chaining with other flaws or special conditions? (lower the severity)\n"
+            "- A realistic codebase has a MIX of severities - not everything is critical\n\n"
+            "Respond ONLY with a JSON object:\n"
+            '{"enriched": [\n'
+            "  {\n"
+            '    "index": <original index>,\n'
+            '    "reasoning": "<detailed vulnerability description>",\n'
+            '    "mitigation": "<specific actionable recommendation>",\n'
+            '    "code_snippet": "<exact vulnerable lines from source>",\n'
+            '    "line_start": <integer line number>,\n'
+            '    "line_end": <integer line number>,\n'
+            '    "adjusted_severity": "critical|high|medium|low|info",\n'
+            '    "severity_justification": "<why this severity level>"\n'
+            "  }\n"
+            "]}\n\n"
+            "CRITICAL RULES:\n"
+            "- line_start and line_end are MANDATORY integers\n"
+            "- code_snippet must be the EXACT lines from the source (max 10 lines)\n"
+            "- mitigation must reference specific identifiers from THIS code\n"
+            "- adjusted_severity is MANDATORY for every finding - think carefully about real-world impact"
+        )
+
+        # Add line numbers to the source code so the LLM can reference them
+        numbered_lines = []
+        for i, line in enumerate(context.code_snippet.splitlines(), start=1):
+            numbered_lines.append(f"{i:4d} | {line}")
+        numbered_source = "\n".join(numbered_lines)
+
+        findings_json = json.dumps(findings_to_enrich, indent=2)
+
+        enrichment_user_prompt = (
+            f"SOURCE CODE ({context.file_path}) with line numbers:\n"
+            f"{numbered_source}\n\n"
+            f"FINDINGS TO REVIEW AND ENRICH:\n{findings_json}\n\n"
+            "For EVERY finding:\n"
+            "1. Read the actual vulnerable code in context above\n"
+            "2. Reason about how exploitable this really is - who can trigger it, what access is needed, "
+            "what is the real impact\n"
+            "3. Assign adjusted_severity based on your reasoning (MANDATORY for ALL findings)\n"
+            "4. If needs_field_enrichment is true, also fill in reasoning, mitigation, code_snippet, "
+            "line_start, line_end\n"
+            "5. Provide severity_justification explaining your severity choice"
+        )
+
+        enrichment_context = PromptContext(
+            file_path=context.file_path,
+            code_snippet=enrichment_user_prompt,
+            language=context.language,
+            analysis_type="enrichment",
+        )
+
+        try:
+            raw_response = await self.llm_service.analyze_code_security(
+                context=enrichment_context,
+                system_prompt=enrichment_system_prompt,
+            )
+
+            enrichment_data = self._extract_json(raw_response)
+            enriched_list = []
+            if isinstance(enrichment_data, dict):
+                enriched_list = enrichment_data.get("enriched", [])
+            elif isinstance(enrichment_data, list):
+                enriched_list = enrichment_data
+
+            enrichment_map = {}
+            for item in enriched_list:
+                idx = item.get("index")
+                if idx is not None:
+                    enrichment_map[idx] = item
+
+            result = []
+            for i, finding in enumerate(findings):
+                if i in enrichment_map:
+                    enriched = enrichment_map[i]
+                    # Use adjusted severity from enrichment if provided
+                    severity = finding.severity
+                    adjusted = enriched.get("adjusted_severity")
+                    if adjusted:
+                        severity = self._parse_severity(adjusted)
+                    result.append(SecurityFinding.create(
+                        issue=finding.issue,
+                        reasoning=enriched.get("reasoning") or finding.reasoning,
+                        mitigation=enriched.get("mitigation") or finding.mitigation,
+                        severity=severity,
+                        confidence=finding.confidence,
+                        file_path=finding.file_path,
+                        code_snippet=self._pick_best_snippet(
+                            finding.code_snippet, enriched.get("code_snippet", "")
+                        ),
+                        line_start=enriched.get("line_start") or finding.line_start,
+                        line_end=enriched.get("line_end") or finding.line_end,
+                        cwe_id=finding.cwe_id,
+                        tags=finding.tags,
+                    ))
+                else:
+                    result.append(finding)
+
+            # Log severity adjustments
+            severity_changes = []
+            for i, finding in enumerate(findings):
+                if i in enrichment_map:
+                    adjusted = enrichment_map[i].get("adjusted_severity")
+                    if adjusted and self._parse_severity(adjusted) != finding.severity:
+                        severity_changes.append(
+                            f"  {finding.issue}: {finding.severity.value} -> {adjusted}"
+                        )
+            if severity_changes:
+                self.logger.info(
+                    f"Severity adjustments ({len(severity_changes)}):\n"
+                    + "\n".join(severity_changes),
+                    extra={"file_path": context.file_path}
+                )
+
+            self.logger.info(
+                f"Successfully enriched {len(enrichment_map)} finding(s)",
+                extra={"file_path": context.file_path}
+            )
+            return result
+
+        except Exception as e:
+            self.logger.warning(
+                f"Finding enrichment failed, using original findings: {e}",
+                extra={"file_path": context.file_path, "error": str(e)}
+            )
+            return findings
+
+    def _is_generic_mitigation(self, mitigation: str) -> bool:
+        """Check if a mitigation string is generic/unhelpful."""
+        if not mitigation:
+            return True
+        lower = mitigation.strip().lower()
+        if lower in ("", "n/a", "none"):
+            return True
+        generic_starts = (
+            "review and remediate",
+            "review this finding",
+            "fix the vulnerability",
+            "fix this issue",
+            "fix this vulnerability",
+            "remediate this",
+            "address this issue",
+            "ensure proper",
+            "implement proper",
+            "add proper",
+            "use proper",
+        )
+        for prefix in generic_starts:
+            if lower.startswith(prefix):
+                return True
+        return False
+
+    def _pick_best_snippet(self, original: str, enriched: str) -> str:
+        """Pick the better code snippet between original and enriched."""
+        orig_valid = original and original not in ("N/A", "")
+        enr_valid = enriched and enriched not in ("N/A", "")
+        if enr_valid:
+            return enriched
+        if orig_valid:
+            return original
+        return "N/A"
 
     def _parse_findings(
         self,
@@ -643,8 +886,30 @@ class SecurityAnalyzer:
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            json_text = self._fix_json(text)
-            return json.loads(json_text)
+            try:
+                json_text = self._fix_json(text)
+                return json.loads(json_text)
+            except json.JSONDecodeError:
+                pass
+
+        # Last resort: try to repair truncated JSON (model hit max_tokens)
+        repaired = self._repair_truncated_json(text)
+        if repaired:
+            try:
+                return json.loads(repaired, strict=False)
+            except json.JSONDecodeError:
+                try:
+                    repaired = self._fix_json(repaired)
+                    return json.loads(repaired, strict=False)
+                except json.JSONDecodeError:
+                    pass
+
+        # Final fallback: extract individual finding objects from partial response
+        findings = self._extract_partial_findings(text)
+        if findings:
+            return {"reviews": findings}
+
+        raise json.JSONDecodeError("No valid JSON found in response", text, 0)
 
     def _fix_json(self, json_text: str) -> str:
         """
@@ -750,7 +1015,52 @@ class SecurityAnalyzer:
             return text
         
         json_text = fix_unescaped_quotes(json_text)
-        
+
+        def fix_inner_quotes(text: str) -> str:
+            """Escape quotes embedded inside JSON string values."""
+            result = []
+            i = 0
+            in_string = False
+
+            while i < len(text):
+                ch = text[i]
+
+                if ch == '\\' and in_string and i + 1 < len(text):
+                    result.append(ch)
+                    result.append(text[i + 1])
+                    i += 2
+                    continue
+
+                if ch == '"':
+                    if not in_string:
+                        in_string = True
+                        result.append(ch)
+                    else:
+                        rest = text[i + 1:].lstrip()
+                        if not rest or rest[0] in (':', '}', ']'):
+                            in_string = False
+                            result.append(ch)
+                        elif rest[0] == ',':
+                            after_comma = rest[1:].lstrip()
+                            if (not after_comma
+                                    or after_comma[0] == '"'
+                                    or after_comma[0] in ('}', ']')
+                                    or after_comma[0].isdigit()):
+                                in_string = False
+                                result.append(ch)
+                            else:
+                                result.append('\\"')
+                        else:
+                            result.append('\\"')
+                    i += 1
+                else:
+                    result.append(ch)
+                    i += 1
+
+            return ''.join(result)
+
+        json_text = fix_inner_quotes(json_text)
+
         # Remove trailing commas before closing braces/brackets
         json_text = re.sub(r',\s*([}\]])', r'\1', json_text)
         
@@ -768,6 +1078,187 @@ class SecurityAnalyzer:
                 json_text = json_text[:last_bracket + 1]
         
         return json_text
+
+    def _repair_truncated_json(self, text: str) -> Optional[str]:
+        """Attempt to repair JSON that was truncated by max_tokens limit."""
+        start_idx = -1
+        for ch in ['{', '[']:
+            idx = text.find(ch)
+            if idx != -1 and (start_idx == -1 or idx < start_idx):
+                start_idx = idx
+
+        if start_idx == -1:
+            return None
+
+        json_text = text[start_idx:]
+
+        last_complete = -1
+        brace_depth = 0
+        in_string = False
+        escape_next = False
+
+        for i, ch in enumerate(json_text):
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == '\\' and in_string:
+                escape_next = True
+                continue
+            if ch == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == '{':
+                brace_depth += 1
+            elif ch == '}':
+                brace_depth -= 1
+                if brace_depth >= 1:
+                    last_complete = i
+
+        if last_complete == -1:
+            return None
+
+        truncated = json_text[:last_complete + 1]
+
+        open_brackets = 0
+        open_braces = 0
+        in_string = False
+        escape_next = False
+        for ch in truncated:
+            if escape_next:
+                escape_next = False
+                continue
+            if ch == '\\' and in_string:
+                escape_next = True
+                continue
+            if ch == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == '{':
+                open_braces += 1
+            elif ch == '}':
+                open_braces -= 1
+            elif ch == '[':
+                open_brackets += 1
+            elif ch == ']':
+                open_brackets -= 1
+
+        result = truncated.rstrip().rstrip(',')
+        result += ']' * open_brackets
+        result += '}' * open_braces
+        return result
+
+    def _extract_partial_findings(self, text: str) -> list:
+        """Extract finding data from a truncated response using multiple strategies."""
+        findings = []
+
+        i = 0
+        while i < len(text):
+            if text[i] == '{':
+                brace_count = 0
+                in_string = False
+                escape_next = False
+
+                for j in range(i, len(text)):
+                    ch = text[j]
+                    if escape_next:
+                        escape_next = False
+                        continue
+                    if ch == '\\' and in_string:
+                        escape_next = True
+                        continue
+                    if ch == '"' and not escape_next:
+                        in_string = not in_string
+                        continue
+                    if not in_string:
+                        if ch == '{':
+                            brace_count += 1
+                        elif ch == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                obj_str = text[i:j + 1]
+                                try:
+                                    obj = json.loads(obj_str, strict=False)
+                                    if isinstance(obj, dict) and "issue" in obj:
+                                        findings.append(obj)
+                                except (json.JSONDecodeError, Exception):
+                                    try:
+                                        fixed = self._fix_json(obj_str)
+                                        obj = json.loads(fixed, strict=False)
+                                        if isinstance(obj, dict) and "issue" in obj:
+                                            findings.append(obj)
+                                    except (json.JSONDecodeError, Exception):
+                                        pass
+                                i = j + 1
+                                break
+                else:
+                    i += 1
+            else:
+                i += 1
+
+        if not findings:
+            findings = self._extract_findings_by_regex(text)
+
+        return findings
+
+    def _extract_findings_by_regex(self, text: str) -> list:
+        """Extract finding fields using regex from truncated JSON."""
+        findings = []
+
+        issue_matches = list(re.finditer(
+            r'"issue"\s*:\s*"((?:[^"\\]|\\.)*)"', text
+        ))
+
+        if not issue_matches:
+            return findings
+
+        for idx, issue_match in enumerate(issue_matches):
+            finding = {"issue": issue_match.group(1)}
+
+            start = issue_match.start()
+            if idx + 1 < len(issue_matches):
+                end = issue_matches[idx + 1].start()
+            else:
+                end = len(text)
+
+            region = text[start:end]
+
+            for field in ("reasoning", "mitigation", "severity", "code_snippet"):
+                match = re.search(
+                    rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)"', region
+                )
+                if match:
+                    finding[field] = match.group(1)
+
+            conf_match = re.search(
+                r'"confidence"\s*:\s*([0-9.]+)', region
+            )
+            if conf_match:
+                try:
+                    finding["confidence"] = float(conf_match.group(1))
+                except ValueError:
+                    pass
+
+            if "confidence" not in finding:
+                conf_str_match = re.search(
+                    r'"confidence"\s*:\s*"((?:[^"\\]|\\.)*)"', region
+                )
+                if conf_str_match:
+                    finding["confidence"] = conf_str_match.group(1)
+
+            for line_field in ("line_start", "line_end"):
+                match = re.search(
+                    rf'"{line_field}"\s*:\s*(\d+)', region
+                )
+                if match:
+                    finding[line_field] = int(match.group(1))
+
+            findings.append(finding)
+
+        return findings
 
     def _enhance_findings_with_context(
         self,
@@ -804,12 +1295,30 @@ class SecurityAnalyzer:
             return findings
         
         for finding in findings:
-            # Try to find the code snippet in the file and extract line numbers
-            line_start, line_end = self._find_snippet_location(
-                finding.code_snippet,
-                file_lines
-            )
-            
+            line_start = None
+            line_end = None
+
+            # Strategy 1: Try to find the code snippet in the file
+            if finding.code_snippet and finding.code_snippet not in ("N/A", ""):
+                line_start, line_end = self._find_snippet_location(
+                    finding.code_snippet,
+                    file_lines
+                )
+
+            # Strategy 2: Use line numbers provided by the AI
+            if line_start is None and finding.line_start:
+                line_start = finding.line_start
+                line_end = finding.line_end or finding.line_start
+
+            # Strategy 3: Search for identifiers in issue text, reasoning, and code_snippet
+            if line_start is None:
+                line_start, line_end = self._find_location_from_issue(
+                    finding.issue,
+                    finding.reasoning,
+                    file_lines,
+                    code_snippet=finding.code_snippet,
+                )
+
             # If we found the location, expand the context
             if line_start is not None:
                 context_snippet = self._extract_context_snippet(
@@ -890,6 +1399,99 @@ class SecurityAnalyzer:
         
         return None, None
 
+    def _extract_identifier_candidates(
+        self,
+        issue: str,
+        reasoning: str,
+        code_snippet: str = "",
+    ) -> List[str]:
+        """Extract identifier candidates from finding text for source file search."""
+        skip_words = {
+            "the", "and", "that", "this", "from", "with", "for", "not",
+            "can", "could", "should", "would", "may", "might", "has",
+            "have", "are", "was", "were", "been", "being", "use", "used",
+            "using", "code", "function", "variable", "value", "data",
+            "file", "line", "return", "void", "int", "char", "bool",
+            "true", "false", "null", "NULL", "define", "include",
+            "struct", "enum", "typedef", "static", "const", "unsigned",
+            "signed", "else", "while", "break", "continue", "switch",
+            "case", "default", "sizeof", "Potential", "security",
+            "vulnerability", "due", "hardcoded", "configuration",
+        }
+
+        combined_text = f"{issue} {reasoning}"
+        candidates = []
+        seen = set()
+
+        def add(name):
+            if name not in seen and name not in skip_words and len(name) >= 3:
+                seen.add(name)
+                candidates.append(name)
+
+        for m in re.findall(r'`(\w+)`', combined_text):
+            add(m)
+
+        for m in re.findall(r'\b(\w{3,})\s*\(', combined_text):
+            add(m)
+
+        if code_snippet and code_snippet not in ("N/A", ""):
+            for m in re.findall(r'\b([A-Z][A-Z0-9_]{2,})\b', code_snippet):
+                add(m)
+            for m in re.findall(r'\b([a-z_]\w{3,})\s*\(', code_snippet):
+                add(m)
+            for m in re.findall(r'\b([a-z_]\w{3,})\b', code_snippet):
+                add(m)
+
+        for m in re.findall(r'\b([A-Z][A-Z0-9_]{2,})\b', combined_text):
+            add(m)
+
+        for m in re.findall(r'\b([a-z_]\w*_\w+)\b', combined_text):
+            if len(m) >= 4:
+                add(m)
+
+        return candidates
+
+    def _find_location_from_issue(
+        self,
+        issue: str,
+        reasoning: str,
+        file_lines: List[str],
+        code_snippet: str = "",
+    ) -> tuple[int | None, int | None]:
+        """Find code location by extracting identifiers from the finding text."""
+        if not file_lines:
+            return None, None
+
+        candidates = self._extract_identifier_candidates(
+            issue, reasoning, code_snippet
+        )
+
+        for name in candidates:
+            for i, line in enumerate(file_lines):
+                if name in line:
+                    line_start = i + 1
+
+                    line_end = line_start
+                    brace_depth = 0
+                    found_open_brace = False
+                    for j in range(i, min(i + 60, len(file_lines))):
+                        for ch in file_lines[j]:
+                            if ch == '{':
+                                brace_depth += 1
+                                found_open_brace = True
+                            elif ch == '}':
+                                brace_depth -= 1
+                        if found_open_brace and brace_depth == 0:
+                            line_end = j + 1
+                            break
+
+                    if line_end - line_start > 30:
+                        line_end = line_start + 30
+
+                    return line_start, line_end
+
+        return None, None
+
     def _extract_context_snippet(
         self,
         file_lines: List[str],
@@ -938,11 +1540,27 @@ class SecurityAnalyzer:
         }
         return severity_map.get(severity.lower(), Severity.MEDIUM)
 
-    def _parse_confidence(self, confidence: float) -> FindingConfidence:
-        """Parse confidence float to FindingConfidence enum."""
-        if confidence >= 0.8:
-            return FindingConfidence.HIGH
-        elif confidence >= 0.5:
+    def _parse_confidence(self, confidence) -> FindingConfidence:
+        """Parse confidence value to FindingConfidence enum.
+
+        Accepts floats (0.0-1.0) or strings ("high", "medium", "low").
+        """
+        if isinstance(confidence, str):
+            confidence_lower = confidence.lower().strip()
+            if confidence_lower == "high":
+                return FindingConfidence.HIGH
+            elif confidence_lower == "medium":
+                return FindingConfidence.MEDIUM
+            else:
+                return FindingConfidence.LOW
+
+        try:
+            conf_val = float(confidence)
+            if conf_val >= 0.8:
+                return FindingConfidence.HIGH
+            elif conf_val >= 0.5:
+                return FindingConfidence.MEDIUM
+            else:
+                return FindingConfidence.LOW
+        except (TypeError, ValueError):
             return FindingConfidence.MEDIUM
-        else:
-            return FindingConfidence.LOW
