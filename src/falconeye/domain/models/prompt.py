@@ -70,6 +70,10 @@ class PromptContext:
         and identify security vulnerabilities through reasoning,
         NOT through pattern matching.
         """
+        # For enrichment requests, the code_snippet is the pre-formatted prompt
+        if self.analysis_type == "enrichment":
+            return self.code_snippet
+
         # Add line numbers to code snippet for AI to reference
         numbered_code = self._add_line_numbers(self.code_snippet)
 

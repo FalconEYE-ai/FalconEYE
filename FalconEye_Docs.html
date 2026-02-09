@@ -1271,7 +1271,8 @@
                 <div class="info-banner">
                     <h3 class="info-banner-title">Core Concept</h3>
                     <p class="info-banner-text">
-                        FalconEYE is an <strong>AI-powered security code analysis tool</strong> that uses local Large Language Models (via Ollama)
+                        FalconEYE is an <strong>AI-powered security code analysis tool</strong> that uses local Large Language Models
+                        (via <strong>Ollama</strong> or <strong>MLX on Apple Silicon</strong>)
                         to identify security vulnerabilities. Unlike traditional security scanners that rely on pattern matching,
                         FalconEYE uses <strong>pure AI reasoning</strong> to understand code context and identify both known and novel vulnerabilities.
                     </p>
@@ -1279,6 +1280,10 @@
                         The tool implements <strong>Retrieval-Augmented Generation (RAG)</strong> to provide rich context to the AI,
                         including similar code segments, documentation, and structural metadata (AST). This enables highly accurate,
                         context-aware security assessments with reduced false positives.
+                    </p>
+                    <p class="info-banner-text">
+                        Incomplete findings are automatically sent back to the LLM for <strong>enrichment</strong> &mdash; producing
+                        specific descriptions, actionable mitigations referencing actual identifiers, code snippets, and accurate line numbers.
                     </p>
                 </div>
 
@@ -1290,7 +1295,7 @@
                     </div>
                     <div class="feature-card">
                         <h4 class="feature-title">Privacy-First</h4>
-                        <p class="feature-description">All analysis runs locally using Ollama - your code never leaves your machine</p>
+                        <p class="feature-description">All analysis runs locally using Ollama or MLX &mdash; your code never leaves your machine</p>
                     </div>
                     <div class="feature-card">
                         <h4 class="feature-title">RAG-Powered</h4>
@@ -1307,6 +1312,14 @@
                     <div class="feature-card">
                         <h4 class="feature-title">High Accuracy</h4>
                         <p class="feature-description">Optional AI validation step filters false positives and confirms real vulnerabilities</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="feature-title">Apple Silicon Accelerated</h4>
+                        <p class="feature-description">Native MLX backend delivers 20-40% faster inference, ~30% lower memory, and ~50% lower latency on M-series chips</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4 class="feature-title">LLM-Powered Enrichment</h4>
+                        <p class="feature-description">Incomplete findings are automatically sent back to the LLM for detailed descriptions, specific mitigations, code snippets, and line numbers</p>
                     </div>
                 </div>
 
@@ -1489,12 +1502,14 @@
                             <div class="component-card">
                                 <h4 class="component-title">LLM Providers</h4>
                                 <span class="component-location">infrastructure/llm_providers/</span>
-                                <p class="component-description">Integration with local Ollama service for AI analysis and embeddings.</p>
+                                <p class="component-description">Dual-backend LLM integration: Ollama (cross-platform) and MLX (Apple Silicon native). The DI container selects the backend via <code>--backend</code> flag or config.</p>
                                 <ul class="component-items">
-                                    <li class="component-item"><code>ollama_adapter.py</code> - Ollama API integration</li>
-                                    <li class="component-item">Security analysis with qwen3-coder:30b</li>
-                                    <li class="component-item">Embeddings with <span style="word-break: break-all;">embeddinggemma:300m</span></li>
-                                    <li class="component-item">Circuit breaker and retry logic</li>
+                                    <li class="component-item"><code>ollama_adapter.py</code> - Ollama API integration (analysis + embeddings)</li>
+                                    <li class="component-item"><code>mlx_adapter.py</code> - Apple Silicon native inference via MLX (analysis only, delegates embeddings to Ollama)</li>
+                                    <li class="component-item">Default Ollama model: qwen3-coder:30b</li>
+                                    <li class="component-item">Default MLX model: Qwen3-Coder-30B-A3B-Instruct-4bit (MoE, 30B total / 3B active)</li>
+                                    <li class="component-item">Embeddings: <span style="word-break: break-all;">embeddinggemma:300m</span> (both backends)</li>
+                                    <li class="component-item">Circuit breaker and retry logic per backend</li>
                                 </ul>
                             </div>
 
@@ -1603,11 +1618,12 @@
                 </div>
 
                 <div class="component-card">
-                    <h4 class="component-title">SecurityAnalyzer → LLMService → OllamaAdapter</h4>
+                    <h4 class="component-title">SecurityAnalyzer → LLMService → Ollama / MLX Adapter</h4>
                     <p class="component-description">
                         <code>SecurityAnalyzer</code> (domain) calls <code>LLMService</code> (domain interface),
-                        which is implemented by <code>OllamaLLMAdapter</code> (infrastructure). This allows swapping
-                        LLM providers without changing business logic.
+                        which is implemented by <code>OllamaLLMAdapter</code> or <code>MLXLLMAdapter</code> (infrastructure).
+                        The DI container selects the backend based on <code>--backend</code> CLI flag or <code>llm.provider</code> config.
+                        MLX uses a hybrid approach: MLX for inference, Ollama for embeddings.
                     </p>
                 </div>
 
@@ -1669,7 +1685,7 @@
 
                 <div class="workflow-container">
                     <h3 class="workflow-title">2. Security Review Workflow</h3>
-                    <p class="workflow-subtitle"><strong>Command:</strong> <code>falconeye review /path/to/file.py</code></p>
+                    <p class="workflow-subtitle"><strong>Command:</strong> <code>falconeye review /path/to/file.py</code> or <code>falconeye review /path/to/file.py --backend mlx</code></p>
 
                     <div class="workflow-step" data-step="1">
                         <div class="workflow-step-title">File Reading & Language Detection</div>
@@ -1685,14 +1701,29 @@
 
                     <div class="workflow-step" data-step="3">
                         <div class="workflow-step-title">AI Security Analysis</div>
-                        <div class="workflow-substep">OllamaLLMAdapter sends to qwen3-coder:30b</div>
-                        <div class="workflow-substep">AI reasons about security vulnerabilities</div>
+                        <div class="workflow-substep">LLM adapter (Ollama or MLX) analyzes code with language-specific security prompts</div>
+                        <div class="workflow-substep">AI reasons about security vulnerabilities with full RAG context</div>
+                        <div class="workflow-substep">Real-time progress: findings shown as they are detected (title + severity)</div>
                     </div>
 
                     <div class="workflow-step" data-step="4">
+                        <div class="workflow-step-title">LLM-Powered Enrichment</div>
+                        <div class="workflow-substep">Incomplete findings (missing line numbers, generic descriptions, vague mitigations) detected automatically</div>
+                        <div class="workflow-substep">Incomplete findings sent back to the LLM with numbered source code for enrichment</div>
+                        <div class="workflow-substep">LLM produces specific descriptions, actionable mitigations referencing actual identifiers, code snippets, and exact line numbers</div>
+                    </div>
+
+                    <div class="workflow-step" data-step="5">
+                        <div class="workflow-step-title">Context Enhancement & Validation</div>
+                        <div class="workflow-substep">Code snippets located in source files with surrounding context</div>
+                        <div class="workflow-substep">Optional AI validation pass filters false positives (--validate flag)</div>
+                    </div>
+
+                    <div class="workflow-step" data-step="6">
                         <div class="workflow-step-title">Result Formatting & Output</div>
+                        <div class="workflow-substep">Fully enriched findings displayed with line numbers, code snippets, descriptions, and recommendations</div>
                         <div class="workflow-substep">Output to console, JSON, HTML, or SARIF</div>
-                        <div class="workflow-substep">Save report if output_directory configured</div>
+                        <div class="workflow-substep">Auto-save reports to falconeye_reports/ directory</div>
                     </div>
                 </div>
             </div>
@@ -1718,7 +1749,11 @@
                     </div>
                     <div class="tech-item">
                         <span class="tech-name">Ollama</span>
-                        <span class="tech-role">Local LLM Provider</span>
+                        <span class="tech-role">LLM Provider (cross-platform)</span>
+                    </div>
+                    <div class="tech-item">
+                        <span class="tech-name">MLX / mlx-lm</span>
+                        <span class="tech-role">LLM Provider (Apple Silicon)</span>
                     </div>
                     <div class="tech-item">
                         <span class="tech-name">ChromaDB 1.0.13+</span>
@@ -1745,15 +1780,51 @@
                 <h3 class="section-title mt-8">AI Models</h3>
                 <div class="card-grid">
                     <div class="card">
-                        <div class="card-title">Analysis Model</div>
+                        <div class="card-title">Ollama Analysis Model</div>
                         <div class="card-value">qwen3-coder:30b</div>
-                        <p class="card-description">Large language model specialized in code understanding and security analysis</p>
+                        <p class="card-description">Large language model specialized in code understanding and security analysis (Ollama backend)</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">MLX Analysis Model</div>
+                        <div class="card-value" style="font-size: 1.1rem; word-break: break-all;">Qwen3-Coder-30B-A3B-Instruct-4bit</div>
+                        <p class="card-description">MoE model (30B total / 3B active), 4-bit quantized for Apple Silicon. 20-40% faster inference than Ollama on M-series chips.</p>
                     </div>
                     <div class="card">
                         <div class="card-title">Embedding Model</div>
                         <div class="card-value" style="word-break: break-all;">embeddinggemma:300m</div>
-                        <p class="card-description">Efficient embedding model for semantic search and RAG</p>
+                        <p class="card-description">Efficient embedding model for semantic search and RAG (used by both backends via Ollama)</p>
                     </div>
+                </div>
+
+                <h3 class="section-title mt-8">MLX Performance Benefits (Apple Silicon)</h3>
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="card-title">Token Generation</div>
+                        <div class="card-value">20-40% faster</div>
+                        <p class="card-description">MLX runs inference directly on Apple GPU/Neural Engine. On MoE models, benchmarks show 17-43% higher tok/s vs llama.cpp. Smaller models see up to 87% gains.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Memory Usage</div>
+                        <div class="card-value">~30% lower</div>
+                        <p class="card-description">Zero-copy unified memory eliminates data duplication between CPU and GPU. Lazy evaluation reduces allocation overhead.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">First-Token Latency</div>
+                        <div class="card-value">~50% lower</div>
+                        <p class="card-description">In-process inference removes the HTTP round-trip overhead of Ollama's REST API on localhost:11434.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">Prompt Processing</div>
+                        <div class="card-value">~25% faster</div>
+                        <p class="card-description">Native Metal compute path vs llama.cpp's Metal abstraction layer for faster prefill.</p>
+                    </div>
+                </div>
+                <div class="info-banner">
+                    <p class="info-banner-text" style="margin-bottom: 0;">
+                        Figures based on published benchmarks of MLX vs llama.cpp on M-series chips
+                        (Barrios et al., arXiv:2601.19139; arXiv:2511.05502; Google Cloud Community Gemma 3 benchmarks).
+                        Actual results vary by model size, quantization level, and hardware generation.
+                    </p>
                 </div>
             </div>
 
@@ -1790,7 +1861,7 @@
 
                     <div class="feature-card">
                         <h4 class="feature-title">Privacy-First</h4>
-                        <p class="feature-description">All analysis runs 100% locally using Ollama. Your code never leaves your machine. No external API calls.</p>
+                        <p class="feature-description">All analysis runs 100% locally using Ollama or MLX. Your code never leaves your machine. No external API calls.</p>
                     </div>
 
                     <div class="feature-card">
@@ -1807,16 +1878,30 @@
                         <h4 class="feature-title">Production-Ready</h4>
                         <p class="feature-description">Circuit breaker, retry logic, structured logging, and graceful error handling for production environments.</p>
                     </div>
+
+                    <div class="feature-card">
+                        <h4 class="feature-title">Apple Silicon Accelerated</h4>
+                        <p class="feature-description">Native MLX backend delivers 20-40% faster inference, ~30% lower memory, and ~50% lower latency on M-series chips via <code>--backend mlx</code>.</p>
+                    </div>
+
+                    <div class="feature-card">
+                        <h4 class="feature-title">LLM-Powered Enrichment</h4>
+                        <p class="feature-description">Incomplete findings are automatically sent back to the LLM with the source code for detailed descriptions, specific mitigations, code snippets, and exact line numbers.</p>
+                    </div>
                 </div>
 
                 <h3 class="section-title mt-8">CLI Commands</h3>
                 <div class="component-card">
                     <ul class="component-items">
-                        <li class="component-item"><code>falconeye index /path/to/project</code> - Index codebase for analysis</li>
-                        <li class="component-item"><code>falconeye review /path/to/file.py</code> - Security review of single file</li>
                         <li class="component-item"><code>falconeye scan /path/to/project</code> - Full scan (index + review)</li>
+                        <li class="component-item"><code>falconeye scan /path/to/project --backend mlx</code> - Scan with MLX backend (Apple Silicon)</li>
+                        <li class="component-item"><code>falconeye scan /path/to/project -v</code> - Scan with verbose output and LLM streaming</li>
+                        <li class="component-item"><code>falconeye index /path/to/project</code> - Index codebase for analysis</li>
+                        <li class="component-item"><code>falconeye review /path/to/file.py</code> - Security review of file or directory</li>
+                        <li class="component-item"><code>falconeye review /path --format html --output report.html</code> - Generate HTML report</li>
+                        <li class="component-item"><code>falconeye review /path --validate --severity high</code> - Validated review, high severity only</li>
                         <li class="component-item"><code>falconeye projects list</code> - List all indexed projects</li>
-                        <li class="component-item"><code>falconeye info</code> - System information and status</li>
+                        <li class="component-item"><code>falconeye info</code> - System information and MLX availability</li>
                     </ul>
                 </div>
             </div>
