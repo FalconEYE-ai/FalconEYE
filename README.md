@@ -30,6 +30,7 @@ FalconEYE represents a paradigm shift in static code analysis. Instead of relyin
 - [Architecture](#architecture)
 - [Development](#development)
 - [FAQ](#faq)
+- [Discoveries](#discoveries)
 - [License](#license)
 
 ---
@@ -103,7 +104,7 @@ FalconEYE follows a multi-stage analysis pipeline:
 
 ### Prerequisites
 
-- **Python 3.12+**
+- **Python 3.12** (recommended) · 3.12+ minimum
 - **Ollama** running locally ([Install Ollama](https://ollama.ai))
 
 ### Installation
@@ -130,6 +131,21 @@ pip install -e ".[mlx]"
 ```
 
 > **Note**: MLX requires an Apple Silicon Mac (M1/M2/M3/M4). The MLX backend uses a hybrid approach — MLX handles LLM inference while Ollama handles embeddings. Ollama must still be running for the indexing step. The MLX analysis model is downloaded automatically from HuggingFace on first use.
+
+### Keeping Up to Date
+
+Once installed from a git clone, you can upgrade FalconEYE to the latest version with a single command:
+
+```bash
+falconeye upgrade
+```
+
+This will:
+1. `git pull origin main` — fetch and merge the latest changes
+2. Reinstall dependencies from `pyproject.toml`
+3. Show what changed (commits pulled) and the new version
+
+> **Note**: `falconeye upgrade` requires FalconEYE to be installed from a git clone (`pip install -e .`). If installed from a package archive, reinstall from the repository instead.
 
 ### Your First Scan
 
@@ -256,6 +272,7 @@ Each language has a dedicated plugin with tailored security prompts, vulnerabili
 | `falconeye scan <path>` | Index and review in one step |
 | `falconeye index <path>` | Index codebase for analysis |
 | `falconeye review <path>` | Analyze code for vulnerabilities |
+| `falconeye upgrade` | Pull latest changes and reinstall dependencies |
 | `falconeye info` | System and configuration information |
 | `falconeye config --init` | Create default configuration file |
 | `falconeye projects list` | Show all indexed projects |
@@ -458,11 +475,41 @@ A: MLX is Apple's ML framework for Apple Silicon. It provides 20-40% faster infe
 **Q: How does FalconEYE handle incomplete findings from local models?**
 A: Local models (especially smaller quantized ones) sometimes produce findings with missing line numbers, vague descriptions, or generic mitigations. FalconEYE detects incomplete findings and automatically sends them back to the LLM with the full source code for enrichment — producing specific descriptions, actionable mitigations referencing actual identifiers, code snippets, and accurate line numbers.
 
+**Q: How do I upgrade FalconEYE to the latest version?**
+A: Run `falconeye upgrade` from anywhere. It detects your git clone location, runs `git pull origin main`, and reinstalls any new or updated dependencies automatically. If you're already on the latest version it will tell you so without making any changes.
+
 **Q: How do I integrate this into CI/CD?**
 A: Use SARIF output format (`--format sarif`) which integrates with GitHub Security, GitLab, and most DevSecOps platforms.
 
 **Q: How long does analysis take?**
 A: Initial indexing depends on codebase size. Subsequent scans with smart re-indexing only process changed files. Using the MLX backend on Apple Silicon reduces analysis time by 20-40% compared to Ollama.
+
+---
+
+## Discoveries
+
+CVEs and vulnerabilities discovered by the FalconEYE authors through research and analysis.
+
+---
+
+### CVE-2026-27446 — Apache ActiveMQ Artemis: Authentication Bypass via Core Federation
+
+| Field | Detail |
+|-------|--------|
+| **CVE ID** | [CVE-2026-27446](https://nvd.nist.gov/vuln/detail/CVE-2026-27446) |
+| **Product** | Apache Artemis / Apache ActiveMQ Artemis |
+| **CWE** | CWE-306 — Missing Authentication for Critical Function |
+| **CVSS 4.0** | **9.3 (Critical)** |
+| **CISA KEV** | Yes — added to Known Exploited Vulnerabilities catalog |
+| **Affected** | Apache Artemis 2.50.0–2.51.0; Apache ActiveMQ Artemis 2.11.0–2.44.0 |
+| **Fixed In** | Apache Artemis 2.52.0 |
+
+**Description:**
+An unauthenticated remote attacker can use the Core protocol to force a target broker to establish an outbound Core federation connection to an attacker-controlled rogue broker. This requires no authentication and no user interaction, enabling the attacker to inject messages into any queue and exfiltrate messages from any queue via the rogue broker.
+
+**Mitigation (if patching is not immediately possible):**
+- Remove Core protocol support from any acceptor receiving connections from untrusted sources, **or**
+- Enforce two-way SSL (certificate-based authentication) on all connections before any message protocol handshake is attempted
 
 ---
 
@@ -496,6 +543,9 @@ falconeye review /path/to/project --severity high
 
 # Verbose mode with LLM streaming
 falconeye scan /path/to/project -v
+
+# Upgrade to the latest version (git clone installs only)
+falconeye upgrade
 
 # System information (shows MLX availability)
 falconeye info

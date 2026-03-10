@@ -204,6 +204,10 @@ class MLXLLMAdapter(LLMService):
                 )
                 raise
 
+    # embeddinggemma:300m and similar small embedding models have a ~2048 token
+    # context window (~8192 chars at 4 chars/token). Truncate before sending.
+    _MAX_EMBEDDING_CHARS: int = 8000
+
     async def generate_embedding(self, text: str) -> List[float]:
         """
         Generate embedding via Ollama (MLX has no native embedding support).
@@ -215,6 +219,12 @@ class MLXLLMAdapter(LLMService):
             Embedding vector
         """
         self._ensure_ollama_client()
+        if len(text) > self._MAX_EMBEDDING_CHARS:
+            self.logger.warning(
+                "Truncating text for embedding (exceeds model context)",
+                extra={"original_len": len(text), "truncated_len": self._MAX_EMBEDDING_CHARS},
+            )
+            text = text[:self._MAX_EMBEDDING_CHARS]
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,

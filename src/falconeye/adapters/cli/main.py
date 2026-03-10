@@ -14,6 +14,7 @@ from .commands import (
     info_command,
     config_command,
 )
+from .commands_upgrade import upgrade_command
 from .commands_projects import (
     projects_list_command,
     projects_info_command,
@@ -328,6 +329,31 @@ def config_cmd(
         show=show,
         console=console,
     )
+
+
+@app.command(name="upgrade")
+def upgrade():
+    """
+    Upgrade FalconEYE to the latest version.
+
+    Pulls the latest changes from the remote git repository (origin/main)
+    and reinstalls Python package dependencies from pyproject.toml.
+
+    Steps performed:
+        1. Detects your FalconEYE git clone location automatically
+        2. Runs: git fetch + git pull origin main
+        3. Reinstalls dependencies: pip install -e . (or pip install .)
+        4. Reports the version before and after
+
+    Requirements:
+        FalconEYE must be installed from a git clone (pip install -e .).
+        Installing from a package archive is not supported — reinstall
+        from the repository instead: https://github.com/FalconEYE-ai/FalconEYE
+
+    Usage:
+        falconeye upgrade
+    """
+    upgrade_command(console=console)
 
 
 # Create projects subcommand group

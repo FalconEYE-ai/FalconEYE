@@ -115,6 +115,7 @@ class DIContainer:
                 model_path=config.llm.mlx.analysis,
                 ollama_host=config.llm.base_url,
                 embedding_model=config.llm.model.embedding,
+                max_tokens=config.llm.mlx.max_tokens,
                 circuit_breaker_config=circuit_breaker_config,
             )
         else:

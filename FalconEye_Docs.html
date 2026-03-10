@@ -1389,6 +1389,7 @@
                                     <li class="component-item"><code>main.py</code> - Typer app setup and command registration</li>
                                     <li class="component-item"><code>commands.py</code> - Index, review, scan, info, config commands</li>
                                     <li class="component-item"><code>commands_projects.py</code> - Project management (list, info, delete)</li>
+                                    <li class="component-item"><code>commands_upgrade.py</code> - Upgrade command (git pull + pip reinstall)</li>
                                     <li class="component-item"><code>banner.py</code> - ASCII art branding and UI elements</li>
                                 </ul>
                             </div>
@@ -1901,10 +1902,37 @@
                         <li class="component-item"><code>falconeye review /path --format html --output report.html</code> - Generate HTML report</li>
                         <li class="component-item"><code>falconeye review /path --validate --severity high</code> - Validated review, high severity only</li>
                         <li class="component-item"><code>falconeye projects list</code> - List all indexed projects</li>
+                        <li class="component-item"><code>falconeye upgrade</code> - Pull latest changes from git and reinstall dependencies</li>
                         <li class="component-item"><code>falconeye info</code> - System information and MLX availability</li>
                     </ul>
                 </div>
             </div>
+        <!-- Discoveries Section -->
+        <section class="content-section" id="discoveries" style="background: var(--surface-color); border-top: 1px solid var(--border-color);">
+            <div class="section-container">
+                <h2 class="section-title">Discoveries</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 2rem;">CVEs and vulnerabilities discovered by the FalconEYE authors through research and analysis.</p>
+
+                <div class="feature-grid" style="grid-template-columns: 1fr;">
+
+                    <div class="feature-card" style="border-left: 4px solid #ef4444;">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                            <h4 class="feature-title" style="margin: 0; color: #ef4444;">CVE-2026-27446</h4>
+                            <span style="background: #ef4444; color: white; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 4px; letter-spacing: 0.05em;">CRITICAL · CVSS 9.3</span>
+                            <span style="background: #7c3aed; color: white; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 4px; letter-spacing: 0.05em;">CISA KEV</span>
+                        </div>
+                        <p class="feature-description" style="font-weight: 600; margin-bottom: 0.5rem;">Apache ActiveMQ Artemis — Authentication Bypass via Core Federation (CWE-306)</p>
+                        <p class="feature-description">An unauthenticated remote attacker can use the Core protocol to force a target broker to establish an outbound Core federation connection to an attacker-controlled rogue broker — enabling <strong>message injection into any queue</strong> and <strong>message exfiltration from any queue</strong>. No authentication or user interaction required.</p>
+                        <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-secondary);">
+                            <span style="margin-right: 1.5rem;"><strong>Affected:</strong> Apache Artemis 2.50.0–2.51.0 · ActiveMQ Artemis 2.11.0–2.44.0</span>
+                            <span><strong>Fixed:</strong> Apache Artemis 2.52.0</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
         </main>
 
         <!-- Footer -->

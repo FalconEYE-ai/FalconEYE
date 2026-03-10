@@ -1,4 +1,9 @@
 # FalconEYE - Dependencies
+#
+# Python version:
+#   Minimum:     Python 3.12+
+#   Recommended: Python 3.12  (tested and optimized for this version)
+#
 chromadb>=1.0.13
 ollama>=0.3.0
 pydantic>=2.0.0
@@ -10,5 +15,6 @@ tree-sitter-language-pack>=0.8.0
 typer>=0.12.0
 
 # MLX Backend (Apple Silicon only)
+# Install with: pip install -e ".[mlx]"
 mlx>=0.22.0
 mlx-lm>=0.21.0

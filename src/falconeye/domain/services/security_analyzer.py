@@ -816,7 +816,16 @@ class SecurityAnalyzer:
         if not text or not text.strip():
             self.logger.warning("Received empty AI response")
             return {"reviews": []}
-        
+
+        # Strip <think>...</think> reasoning blocks (Qwen3, DeepSeek-R1, etc.)
+        # These appear before the actual JSON and can contain ```json markers that
+        # would fool the extractor into grabbing the wrong block.
+        if "<think>" in text and "</think>" in text:
+            think_start = text.find("<think>")
+            think_end = text.find("</think>") + len("</think>")
+            text = text[:think_start] + text[think_end:]
+            text = text.strip()
+
         # Try to find JSON in markdown code block
         if "```json" in text:
             start = text.find("```json") + 7
@@ -827,9 +836,12 @@ class SecurityAnalyzer:
             try:
                 return json.loads(json_text)
             except json.JSONDecodeError:
-                # Try to fix common JSON issues
-                json_text = self._fix_json(json_text)
-                return json.loads(json_text)
+                # Try to fix common JSON issues; if still broken fall through to repair
+                try:
+                    fixed = self._fix_json(json_text)
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    pass  # Fall through to _repair_truncated_json / _extract_partial_findings
 
         # Try to extract JSON object/array from text FIRST
         # (before checking code blocks, since ``` might be inside JSON strings)
@@ -879,8 +891,11 @@ class SecurityAnalyzer:
                 try:
                     return json.loads(json_text)
                 except json.JSONDecodeError:
-                    json_text = self._fix_json(json_text)
-                    return json.loads(json_text)
+                    try:
+                        fixed = self._fix_json(json_text)
+                        return json.loads(fixed)
+                    except json.JSONDecodeError:
+                        pass  # Fall through to repair/partial extraction
 
         # Try parsing the whole response as last resort
         try:

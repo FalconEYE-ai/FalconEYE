@@ -22,6 +22,12 @@ class MLXModelConfig(BaseModel):
         default="mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
         description="HuggingFace model path for MLX inference"
     )
+    max_tokens: int = Field(
+        default=32768,
+        ge=1024,
+        le=131072,
+        description="Maximum tokens to generate per response (higher needed for thinking models)"
+    )
 
 
 class RetryConfigModel(BaseModel):
